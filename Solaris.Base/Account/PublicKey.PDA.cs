@@ -7,7 +7,7 @@ namespace Solaris.Base.Account;
 public partial class PublicKey
 {
     private static readonly byte[] ProgramDerivedAddressBytes = "ProgramDerivedAddress"u8.ToArray();
-
+    
     /// <summary>
     /// Derives a program address
     /// </summary>
@@ -16,14 +16,14 @@ public partial class PublicKey
     /// <param name="publicKey">The derived public key, returned as inline out</param>
     /// <returns>true if it could derive the program address for the given seeds, otherwise false</returns>
     /// <exception cref="ArgumentException">Throws exception when one of the seeds has an invalid length</exception>
-    public static bool TryCreateProgramAddress(ICollection<byte[]> seeds, PublicKey programId, out PublicKey publicKey)
+    public static bool TryCreateProgramAddress(ICollection<ReadOnlyMemory<byte>> seeds, PublicKey programId, out PublicKey publicKey)
     {
         using var buffer = new MemoryStream(PublicKeyLength * seeds.Count + ProgramDerivedAddressBytes.Length + PublicKeyLength /* programId */);
 
         foreach (var seed in seeds)
         {
             if (seed.Length > PublicKeyLength) throw new ArgumentOutOfRangeException(nameof(seeds), "Max seed length exceeded");
-            buffer.Write(seed);
+            buffer.Write(seed.Span);
         }
 
         buffer.Write(programId.KeyMemory.Span);
@@ -50,28 +50,49 @@ public partial class PublicKey
     /// <param name="address">The derived address, returned as inline out</param>
     /// <param name="bump">The bump used to derive the address, returned as inline out</param>
     /// <returns>True whenever the address for a nonce was found, otherwise false</returns>
-    public static bool TryFindProgramAddress(ICollection<byte[]> seeds, PublicKey programId, [NotNullWhen(true)] out PublicKey? address, out byte bump)
+    public static bool TryFindProgramAddress(ICollection<ReadOnlyMemory<byte>> seeds, PublicKey programId, [NotNullWhen(true)] out PublicKey? address, out byte bump)
     {
-        byte seedBump = 255;
+        Memory<byte> seedBump = new byte[] { 255 };
+        var span = seedBump.Span;
 
-        while (seedBump != 0)
+        while (span[0] != 0)
         {
-            var success = TryCreateProgramAddress([..seeds, [seedBump]], programId, out var derivedAddress);
+            var success = TryCreateProgramAddress([..seeds, seedBump], programId, out var derivedAddress);
 
             if (success)
             {
                 address = derivedAddress;
-                bump = seedBump;
+                bump = span[0];
                 return true;
             }
 
-            seedBump--;
+            span[0]--;
         }
 
         address = null;
         bump = 0;
 
         return false;
+    }
+
+    public static (PublicKey? key, byte bump) FindProgramAddress(PublicKey programId, params ReadOnlyMemory<byte>[] seeds)
+    {
+        Memory<byte> seedBump = new byte[] { 255 };
+        var span = seedBump.Span;
+
+        while (span[0] != 0)
+        {
+            var success = TryCreateProgramAddress([..seeds, seedBump], programId, out var derivedAddress);
+
+            if (success)
+            {
+                return (derivedAddress, span[0]);
+            }
+
+            span[0]--;
+        }
+
+        return (null, 0);
     }
 
     /// <summary>
@@ -81,7 +102,7 @@ public partial class PublicKey
     /// <param name="seed"></param>
     /// <param name="programId"></param>
     /// <returns>Derived public key</returns>
-    public static PublicKey CreateWithSeed(PublicKey fromPublicKey, byte[] seed, PublicKey programId)
+    public static PublicKey CreateWithSeed(PublicKey fromPublicKey, ReadOnlySpan<byte> seed, PublicKey programId)
     {
         using var buffer = new MemoryStream(PublicKeyLength * 2 + seed.Length);
 
