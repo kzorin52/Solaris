@@ -81,4 +81,71 @@ public class PublicKeyTest
     {
         return PublicKey.FindProgramAddress(CandyMachineProgram, "extension"u8.ToArray(), candyMachine).Key;
     }
+
+    #region OnCurve Cases
+
+    private static readonly (string pub, bool onCurve)[] OnCurveCases =
+    [
+        ("BBK7u9zPqUdxdX4jUxYoJ3XfyT34gbEV45xZCBN6dv6j", true),
+        ("8psSuPgPa8c1mb85DbTyoVtvNaG2ZVrQkGLb8Z1QiYQc", false),
+        ("EAakxrpHP69yQaKPMJwEkhYTto1sJDdUpnfSLEAwtRh7", false),
+        ("741BtbbKKf3sf79PCrwiwA8BLNzN11A41qoN3Vf2S9qr", false),
+        ("BieNKWADFhTioXoF5177Yh1CyhdvgSRu5QR7fhyU3E6U", true),
+        ("G5hPU5bA3NphTx5C9DZ5K4XZdrjxpSiZLMCvLk68EYzA", false),
+        ("EpuRq2Gb1HLNyWb32G7ik9LPNgrLtXagi7QCrfrASfgo", true),
+        ("UTVLUqvwVVoKCcpeFECgxzuCzLXco5TPJGgJbACWiPL", true),
+        ("FZe8Q9jbNym8WJb9mZXVUBVuweLZotQBsJyhuUXvFoJm", false),
+        ("41incBht3Z4KCMLDTWFQmSNxuYroJmKximjphvXRoPK7", true),
+        ("78iFVorL1nLakY5Z4XBuMYXnLojrUf2hy8iyBM3zD6GT", true),
+        ("5KJPKHCPexKTT7N3sLg2iCbBPefHodPiMiiucsDTkcSA", false),
+        ("5hYtuGBy6HunCnaEz1EEgfRZJ73oxQY3qh7P99q64Uzt", false),
+        ("CJ1hNwhTi4Q9YR7yYGa239YoRTjv3MWe2av8ZWx2RBv6", true),
+        ("5QZDbkwkHqFGQkHpMpnjLRPttDXUYvC2gd4J2xpr8D3g", false),
+        ("HnwmqV7UPs5Gae4UsrKuYwVQFxvjMqANTTE5QPrtkdBE", true),
+        ("AtyTeKtCSnugiE1pLb1kdDEWbUPPUYdzD3f6mkw85mB1", true),
+        ("25JaYKd5EGWqFqV9Xg7tNGe5qUC3Z5q8ENWop6eZUsz5", false),
+        ("3MRmyY4NHmrtV49iwX989CivKv7uZeLTvL9DDH3wo4f7", true),
+        ("3RUhzanVqJNc8gv4J5L1JYD4eh9fnLGLVRx1c2QRiFAM", true),
+        ("ATeL4xod3r8XAZQMkGRsVsPAqT23xZxmjEjN66ycv8HL", true),
+        ("9gMPZ2o9BXLq3zsWK2tj8FtAQrDTcF9dG8XgG9GM3BxJ", true),
+        ("FTcGQsaT7arqqpt5Qo1SbD676jRRwS1Zn1EkW7SXX1Nk", false),
+        ("38RmPLLgFY9UwjZPmLF4qTr4caY6tZ83PrF148S323pw", false),
+        ("CvqHwLf8QfmQvBq487Ypx9ZWPjYq16oMZVCQNkeoS7i3", false),
+        ("HLtvzyhhtdaZPv2t2sgHqDPV6rSbkXPZgqzMxFLc2bPc", true),
+        ("6uVbJr65m35DVbsDPnpoWEmQMiEKQB7wXZBwwrGk2EP", false),
+        ("5YmPcJpCSTgsS5168ykrpvvnfFaNPj1mKYsRaUdtbv9r", true),
+        ("EpknLT9hMhy8M2hs4GhxJCXi7DCv3FXrVaV88YDHWeUF", true),
+        ("2TC96fnqZY4AS4Mv1dk6QGyAEmTkBuWH3fo6dsFF2ocr", true),
+        ("G7SPwEyo9VEm3ogWXCfvo9jx9YP5kEfT2AGZRB5uak6h", true),
+        ("5VKPXThTymdrnxpRLdPPjnmPG6Kz5by3f82APHzDvPxU", false),
+        ("BhPndF8gLtUotX9z9v9Nwoxf2ggFN7Qf1qL9DBk7Xxhq", false),
+        ("5RkowCKqSzvGfwpE3uVt8v5o9qmiCPZztMkvJgAbKgn2", false),
+        ("4Ua71TSijz85kdRU642nWawUF3kVAPECoXYhaPaK3T8L", true),
+        ("5qaGG9wF6MZPaajGraELtwVnWLSDamgubup4VCvdp5e3", false),
+        ("DC9pGRbvD6GEWe5J3QBiQ6RT6RM9brq5o8gNfuBUmdoX", false),
+        ("AJZWKUMS2ySCUFVY6iBWM14zfYpnqWF2HELJkfKdbiFh", false),
+        ("BLJPHYNw4xjNfABb9zTibg2ytVgEL1Ey93B1URq8qZ3A", true),
+        ("72zLD2oqca9NvbUXseGS3bH3TWks8BvVaBmyUeCwytrk", true),
+        ("BKddA91W49uzgMhyCtDxtEmCVuFdkpxNisqGpGB7LrNz", true),
+        ("4zehiGZjgWwffpdm1kG1bwS9wkfFd2ZuU3Q4RPeTxRe9", false),
+        ("BDBd5yY4j1QW4pDgBtE4pVtZkFfi6pcjJpmzRmQ7QptB", true),
+        ("6bn1JScH4PujYN1s3rQoAwQa8KSsP23aR45AjLM6gE8W", true),
+        ("HbDbp8mjPJTLLW1Z2C99W3CPTjaJX1m4JiRyxxg7QLm7", false),
+        ("HbFLD5FNqxMQNo2YVFsuwDH4Ro4BbVFi1qBciu6viVn6", true),
+        ("2HNS6YHHWmjgYFqw6Kud7zZ7FuwY9swzgU4GaUUGn8A1", true),
+        ("EohDYmkJSRp7jHKxhGjUoiyVGYW3jVP5ppSRT13Lh5Gc", true),
+        ("ApX7AaCPziVdDBye65SCcXB6PYDi85WGTXUebzGM9QkN", false),
+        ("4aP7z4ajiLcX7ASox27NbBLiatXBbSgTJxkzhw7Fp8Qa", false)
+    ];
+
+    #endregion
+
+    [TestMethod]
+    public void OnCurveTests() // covering Ed25519Extensions
+    {
+        foreach (var (pub, onCurve) in OnCurveCases)
+        {
+            Assert.AreEqual(onCurve, new PublicKey(pub).IsOnCurve());
+        }
+    }
 }
