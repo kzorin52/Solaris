@@ -122,8 +122,8 @@ namespace Solaris.Base.Account
         public static implicit operator PrivateKey(string encodedKey) => new(encodedKey);
         public static implicit operator PrivateKey(byte[] rawKey) => new(rawKey);
         public static implicit operator PrivateKey(ReadOnlyMemory<byte> rawKey) => new(rawKey);
-        public static implicit operator PublicKey(PrivateKey key) => key.PublicKey;
 
+        public static implicit operator PublicKey(PrivateKey key) => key.PublicKey;
         public static implicit operator string(PrivateKey key) => key.Key;
         public static implicit operator byte[](PrivateKey key) => key.KeyBytes;
         public static implicit operator ReadOnlyMemory<byte>(PrivateKey key) => key.KeyMemory;

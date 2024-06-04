@@ -13,7 +13,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Элементы решен
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Solaris.Base.Tests", "Solaris.Base.Tests\Solaris.Base.Tests.csproj", "{6504D483-8548-4679-AC6F-F5080A752E68}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SolarisPlayground", "SolarisPlayground\SolarisPlayground.csproj", "{6A10DA2F-1C37-48D5-B98D-8C5816EF697A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SolarisPlayground", "SolarisPlayground\SolarisPlayground.csproj", "{6A10DA2F-1C37-48D5-B98D-8C5816EF697A}"
 EndProject
 Global
 	GlobalSection(ExtensibilityGlobals) = postSolution

@@ -61,17 +61,14 @@ public partial class PublicKey
         foreach (var seed in seeds)
         {
             ArgumentOutOfRangeException.ThrowIfGreaterThan(seed.Length, PublicKeyLength, nameof(seed));
-            seed.Span.CopyTo(buffer.Slice(offset, seed.Length));
-            offset += seed.Length;
+            seed.Span.CopyTo(buffer[offset..]); offset += seed.Length;
         }
 
         var bumpIndex = offset++;
         buffer[bumpIndex] = 255;
 
-        programId.KeyMemory.Span.CopyTo(buffer.Slice(offset, PublicKeyLength));
-        offset += PublicKeyLength;
-
-        ProgramDerivedAddressBytes.Span.CopyTo(buffer.Slice(offset, ProgramDerivedAddressBytes.Length));
+        programId.KeyMemory.Span.CopyTo(buffer[offset..]); offset += PublicKeyLength;
+        ProgramDerivedAddressBytes.Span.CopyTo(buffer[offset..]);
 
         while (buffer[bumpIndex] != 0)
         {
