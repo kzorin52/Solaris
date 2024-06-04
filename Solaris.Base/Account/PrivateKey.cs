@@ -142,7 +142,7 @@ namespace Solaris.Base.Account
         /// <inheritdoc cref="GetHashCode()"/>
         public override int GetHashCode()
         {
-            return ByteHelpers.FastHashCode(KeyMemory.Span);
+            return KeyMemory.Span.FastHashCode();
         }
 
         protected bool Equals(PrivateKey other)

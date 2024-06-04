@@ -125,9 +125,9 @@ public partial class PublicKey
     }
     
     /// <summary>
-    /// Checks if this object is a valid Ed25519 PublicKey.
+    /// Checks if this object is a valid Ed25519 PublicKey
     /// </summary>
-    /// <returns>Returns true if it is a valid key, false otherwise.</returns>
+    /// <returns>Returns true if it is a valid key, false otherwise</returns>
     public bool IsOnCurve()
     {
         return KeyMemory.Span.IsOnCurve();

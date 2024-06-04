@@ -20,7 +20,6 @@ public static class Base58
     /// <returns>Raw bytes</returns>
     public static byte[] DecodeData(ReadOnlySpan<char> data) => SimpleBase.Base58.Bitcoin.Decode(data);
 
-
     public static void TryEncodeData(ReadOnlySpan<byte> data, Span<char> result, out int bytesWritten)
     {
         var success = SimpleBase.Base58.Bitcoin.TryEncode(data, result, out bytesWritten);

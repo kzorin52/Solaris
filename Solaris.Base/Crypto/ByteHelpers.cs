@@ -10,7 +10,7 @@ public static class ByteHelpers
         }
     }
 
-    public static int FastHashCode(ReadOnlySpan<byte> array)
+    public static int FastHashCode(this ReadOnlySpan<byte> array)
     {
         unchecked
         {
