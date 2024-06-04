@@ -10,9 +10,14 @@ namespace Solaris.Base.Account
     public class PrivateKey
     {
         /// <summary>
-        /// Private key length.
+        /// Private key length
         /// </summary>
         public const int PrivateKeyLength = 64;
+        
+        /// <summary>
+        /// Secret key length
+        /// </summary>
+        public const int SecretKeyLength = 32;
 
         #region Encodings
 
@@ -67,7 +72,6 @@ namespace Solaris.Base.Account
         /// Private key represented as byte[]
         /// </summary>
         public byte[] KeyBytes => _keyBytes ??= KeyMemory.ToArray();
-
         private byte[] SecretKeyBytes => _secretKeyBytes ??= KeyMemory[..32].ToArray();
 
         #endregion
@@ -77,23 +81,29 @@ namespace Solaris.Base.Account
         /// <summary>
         /// Initialize the private key from the given byte array
         /// </summary>
-        /// <param name="key">The private key as byte array</param>
+        /// <param name="key">The private or secret key as byte array</param>
         public PrivateKey(byte[] key)
         {
-            if (key.Length != PrivateKeyLength)
-                throw new ArgumentOutOfRangeException(nameof(key), "Invalid key length");
-            _keyBytes = key;
+            _keyMemory = key.Length switch
+            {
+                PrivateKeyLength => key,
+                SecretKeyLength => ExpandSecretKey(key),
+                _ => throw new ArgumentOutOfRangeException(nameof(key), key.Length, "Private key should be 32 or 64 bytes")
+            };
         }
 
         /// <summary>
         /// Initialize the private key from the given <see cref="ReadOnlyMemory{T}"/>
         /// </summary>
-        /// <param name="key">The private key as <see cref="ReadOnlyMemory{T}"/></param>
+        /// <param name="key">The private or secret key as <see cref="ReadOnlyMemory{T}"/></param>
         public PrivateKey(ReadOnlyMemory<byte> key)
         {
-            if (key.Length != PrivateKeyLength)
-                throw new ArgumentOutOfRangeException(nameof(key), "Invalid key length");
-            _keyMemory = key;
+            _keyMemory = key.Length switch
+            {
+                PrivateKeyLength => key,
+                SecretKeyLength => ExpandSecretKey(key.Span),
+                _ => throw new ArgumentOutOfRangeException(nameof(key), key.Length, "Private key should be 32 or 64 bytes")
+            };
         }
 
         /// <summary>
@@ -192,12 +202,36 @@ namespace Solaris.Base.Account
         /// <returns>Is current public key equal derived key</returns>
         public bool Validate()
         {
-            var currentPublicKey = PublicKey.KeyMemory.Span;
+            var derivedPublicKey = GetPublicKey(SecretKeyBytes);
+            return PublicKey.KeyMemory.Span.SequenceEqual(derivedPublicKey.KeyMemory.Span);
+        }
 
-            Span<byte> derivedPublicKey = stackalloc byte[32];
-            Org.BouncyCastle.Math.EC.Rfc8032.Ed25519.GeneratePublicKey(SecretKeyBytes, derivedPublicKey);
+        /// <summary>
+        /// Derives Ed25519 public key from 32-byte secret key
+        /// </summary>
+        /// <param name="secretKey">32-byte Ed25519 secret key</param>
+        /// <returns>Derived public key</returns>
+        public static PublicKey GetPublicKey(ReadOnlySpan<byte> secretKey)
+        {
+            ArgumentOutOfRangeException.ThrowIfNotEqual(secretKey.Length, SecretKeyLength, nameof(secretKey));
 
-            return currentPublicKey.SequenceEqual(derivedPublicKey);
+            Memory<byte> derivedPublicKey = new byte[PublicKey.PublicKeyLength];
+            Org.BouncyCastle.Math.EC.Rfc8032.Ed25519.GeneratePublicKey(secretKey, derivedPublicKey.Span);
+
+            return new PublicKey(derivedPublicKey);
+        }
+
+        private static Memory<byte> ExpandSecretKey(ReadOnlySpan<byte> secretKey)
+        {
+            ArgumentOutOfRangeException.ThrowIfNotEqual(secretKey.Length, SecretKeyLength, nameof(secretKey));
+
+            Memory<byte> expanded = new byte[PrivateKeyLength];
+            var span = expanded.Span;
+
+            secretKey.CopyTo(span[..32]);
+            Org.BouncyCastle.Math.EC.Rfc8032.Ed25519.GeneratePublicKey(secretKey, span[32..]);
+
+            return expanded;
         }
     }
 }
