@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using Solaris.Base.Crypto;
 
@@ -6,8 +7,8 @@ namespace Solaris.Base.Account;
 
 public partial class PublicKey
 {
-    private static readonly byte[] ProgramDerivedAddressBytes = "ProgramDerivedAddress"u8.ToArray();
-    
+    private static readonly ReadOnlyMemory<byte> ProgramDerivedAddressBytes = "ProgramDerivedAddress"u8.ToArray();
+
     /// <summary>
     /// Derives a program address
     /// </summary>
@@ -15,23 +16,26 @@ public partial class PublicKey
     /// <param name="programId">The program ID</param>
     /// <param name="publicKey">The derived public key, returned as inline out</param>
     /// <returns>true if it could derive the program address for the given seeds, otherwise false</returns>
-    /// <exception cref="ArgumentException">Throws exception when one of the seeds has an invalid length</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Throws exception when one of the seeds has an invalid length</exception>
     public static bool TryCreateProgramAddress(ICollection<ReadOnlyMemory<byte>> seeds, PublicKey programId, out PublicKey publicKey)
     {
-        using var buffer = new MemoryStream(PublicKeyLength * seeds.Count + ProgramDerivedAddressBytes.Length + PublicKeyLength /* programId */);
+        var len = ProgramDerivedAddressBytes.Length + PublicKeyLength + seeds.Sum(x => x.Length); // pda header + programId + seeds len
+        var buffer = len <= 1024 ? stackalloc byte[len] : new byte[len];
 
+        var offset = 0;
         foreach (var seed in seeds)
         {
-            if (seed.Length > PublicKeyLength) throw new ArgumentOutOfRangeException(nameof(seeds), "Max seed length exceeded");
-            buffer.Write(seed.Span);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(seed.Length, PublicKeyLength, nameof(seed));
+            seed.Span.CopyTo(buffer.Slice(offset, seed.Length));
+            offset += seed.Length;
         }
 
-        buffer.Write(programId.KeyMemory.Span);
-        buffer.Write(ProgramDerivedAddressBytes);
+        programId.KeyMemory.Span.CopyTo(buffer.Slice(offset, PublicKeyLength));
+        offset += PublicKeyLength;
 
-        buffer.Position = 0;
+        ProgramDerivedAddressBytes.Span.CopyTo(buffer.Slice(offset, ProgramDerivedAddressBytes.Length));
+
         var hash = SHA256.HashData(buffer);
-
         if (hash.IsOnCurve())
         {
             publicKey = new PublicKey(hash);
@@ -45,54 +49,39 @@ public partial class PublicKey
     /// <summary>
     /// Attempts to find a program address for the passed seeds and program ID
     /// </summary>
-    /// <param name="seeds">The address seeds</param>
-    /// <param name="programId">The program ID</param>
-    /// <param name="address">The derived address, returned as inline out</param>
-    /// <param name="bump">The bump used to derive the address, returned as inline out</param>
-    /// <returns>True whenever the address for a nonce was found, otherwise false</returns>
-    public static bool TryFindProgramAddress(ICollection<ReadOnlyMemory<byte>> seeds, PublicKey programId, [NotNullWhen(true)] out PublicKey? address, out byte bump)
-    {
-        Memory<byte> seedBump = new byte[] { 255 };
-        var span = seedBump.Span;
-
-        while (span[0] != 0)
-        {
-            var success = TryCreateProgramAddress([..seeds, seedBump], programId, out var derivedAddress);
-
-            if (success)
-            {
-                address = derivedAddress;
-                bump = span[0];
-                return true;
-            }
-
-            span[0]--;
-        }
-
-        address = null;
-        bump = 0;
-
-        return false;
-    }
-
+    /// <param name="programId"></param>
+    /// <param name="seeds"></param>
+    /// <returns></returns>
     public static (PublicKey? Key, byte Bump) FindProgramAddress(PublicKey programId, params ReadOnlyMemory<byte>[] seeds)
     {
-        Memory<byte> seedBump = new byte[] { 255 };
-        var span = seedBump.Span;
+        var len = ProgramDerivedAddressBytes.Length + PublicKeyLength + seeds.Sum(x => x.Length) + 1; // pda header + programId + seeds len + bump
+        var buffer = len <= 1024 ? stackalloc byte[len] : new byte[len];
 
-        while (span[0] != 0)
+        var offset = 0;
+        foreach (var seed in seeds)
         {
-            var success = TryCreateProgramAddress([..seeds, seedBump], programId, out var derivedAddress);
-
-            if (success)
-            {
-                return (derivedAddress, span[0]);
-            }
-
-            span[0]--;
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(seed.Length, PublicKeyLength, nameof(seed));
+            seed.Span.CopyTo(buffer.Slice(offset, seed.Length));
+            offset += seed.Length;
         }
 
-        return (null, 0);
+        var bumpIndex = offset++;
+        buffer[bumpIndex] = 255;
+
+        programId.KeyMemory.Span.CopyTo(buffer.Slice(offset, PublicKeyLength));
+        offset += PublicKeyLength;
+
+        ProgramDerivedAddressBytes.Span.CopyTo(buffer.Slice(offset, ProgramDerivedAddressBytes.Length));
+
+        while (buffer[bumpIndex] != 0)
+        {
+            var hash = SHA256.HashData(buffer);
+            if (!hash.IsOnCurve()) return (hash, buffer[bumpIndex]);
+
+            buffer[bumpIndex]--;
+        }
+
+        return (null, buffer[bumpIndex]);
     }
 
     /// <summary>
@@ -104,13 +93,7 @@ public partial class PublicKey
     /// <returns>Derived public key</returns>
     public static PublicKey CreateWithSeed(PublicKey fromPublicKey, ReadOnlySpan<byte> seed, PublicKey programId)
     {
-        using var buffer = new MemoryStream(PublicKeyLength * 2 + seed.Length);
-
-        buffer.Write(fromPublicKey.KeyMemory.Span);
-        buffer.Write(seed);
-        buffer.Write(programId.KeyMemory.Span);
-
-        var hash = SHA256.HashData(buffer);
+        var hash = SHA256.HashData([..fromPublicKey.KeyMemory.Span, ..seed, ..programId.KeyMemory.Span]);
         return new PublicKey(hash);
     }
 }

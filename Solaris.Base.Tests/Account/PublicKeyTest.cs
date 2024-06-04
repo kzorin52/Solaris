@@ -72,7 +72,7 @@ public class PublicKeyTest
         foreach (var (acc, pda) in PDACases)
         {
             var der = GetExtensions(acc).Key;
-            Assert.AreEqual(pda, der, $"Expected: {pda}; Actual: {der}");
+            Assert.AreEqual(pda, der);
         }
     }
 
