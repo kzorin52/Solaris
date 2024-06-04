@@ -119,7 +119,7 @@ public partial class PublicKey
     /// <param name="signature"></param>
     /// <param name="signatureOffset">Signature offset, when null sets to zero</param>
     /// <returns></returns>
-    public bool Verify(byte[] message, int? messageOffset, int? messageLength, byte[] signature, int? signatureOffset)
+    public bool Verify(byte[] message, byte[] signature, int? messageOffset = null, int? messageLength = null, int? signatureOffset = null)
     {
         return Org.BouncyCastle.Math.EC.Rfc8032.Ed25519.Verify(signature, signatureOffset ?? 0, KeyBytes, 0, message, messageOffset ?? 0, messageLength ?? message.Length);
     }

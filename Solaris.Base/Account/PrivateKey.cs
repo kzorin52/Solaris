@@ -188,7 +188,7 @@ namespace Solaris.Base.Account
         /// <param name="messageOffset">Message offset, when null sets to zero</param>
         /// <param name="messageLength">Message length, when null sets to <paramref name="message"/>.Length</param>
         /// <returns>The signature of the data</returns>
-        public byte[] Sign(byte[] message, int? messageOffset, int? messageLength)
+        public byte[] Sign(byte[] message, int? messageOffset = null, int? messageLength = null)
         {
             var sig = new byte[64];
             Org.BouncyCastle.Math.EC.Rfc8032.Ed25519.Sign(SecretKeyBytes, 0, PublicKey.KeyBytes, 0, message, messageOffset ?? 0, messageLength ?? message.Length, sig, 0);

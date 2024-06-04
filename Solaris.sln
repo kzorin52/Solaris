@@ -11,11 +11,23 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Элементы решен
 		README.md = README.md
 	EndProjectSection
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Solaris.Base.Tests", "Solaris.Base.Tests\Solaris.Base.Tests.csproj", "{6504D483-8548-4679-AC6F-F5080A752E68}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SolarisPlayground", "SolarisPlayground\SolarisPlayground.csproj", "{6A10DA2F-1C37-48D5-B98D-8C5816EF697A}"
+EndProject
 Global
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {11F29592-251C-4B11-A75F-CE3D6023AD80}
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6504D483-8548-4679-AC6F-F5080A752E68}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6504D483-8548-4679-AC6F-F5080A752E68}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6504D483-8548-4679-AC6F-F5080A752E68}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6504D483-8548-4679-AC6F-F5080A752E68}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6A10DA2F-1C37-48D5-B98D-8C5816EF697A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6A10DA2F-1C37-48D5-B98D-8C5816EF697A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6A10DA2F-1C37-48D5-B98D-8C5816EF697A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6A10DA2F-1C37-48D5-B98D-8C5816EF697A}.Release|Any CPU.Build.0 = Release|Any CPU
 		{B2DAAC67-3EDC-424B-B2E8-8A2887655392}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{B2DAAC67-3EDC-424B-B2E8-8A2887655392}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B2DAAC67-3EDC-424B-B2E8-8A2887655392}.Release|Any CPU.ActiveCfg = Release|Any CPU

@@ -75,7 +75,7 @@ public partial class PublicKey
         return false;
     }
 
-    public static (PublicKey? key, byte bump) FindProgramAddress(PublicKey programId, params ReadOnlyMemory<byte>[] seeds)
+    public static (PublicKey? Key, byte Bump) FindProgramAddress(PublicKey programId, params ReadOnlyMemory<byte>[] seeds)
     {
         Memory<byte> seedBump = new byte[] { 255 };
         var span = seedBump.Span;
