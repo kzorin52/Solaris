@@ -8,6 +8,7 @@ namespace Solaris.Base.Account;
 public partial class PublicKey
 {
     private static readonly ReadOnlyMemory<byte> ProgramDerivedAddressBytes = "ProgramDerivedAddress"u8.ToArray();
+    private const int MaxSeedsCount = 16;
 
     /// <summary>
     /// Derives a program address
@@ -19,6 +20,8 @@ public partial class PublicKey
     /// <exception cref="ArgumentOutOfRangeException">Throws exception when one of the seeds has an invalid length</exception>
     public static bool TryCreateProgramAddress(ICollection<ReadOnlyMemory<byte>> seeds, PublicKey programId, out PublicKey publicKey)
     {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(seeds.Count, MaxSeedsCount, nameof(seeds));
+
         var len = ProgramDerivedAddressBytes.Length + PublicKeyLength + seeds.Sum(x => x.Length); // pda header + programId + seeds len
         var buffer = len <= 1024 ? stackalloc byte[len] : new byte[len];
 
@@ -54,6 +57,8 @@ public partial class PublicKey
     /// <returns></returns>
     public static (PublicKey? Key, byte Bump) FindProgramAddress(PublicKey programId, params ReadOnlyMemory<byte>[] seeds)
     {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(seeds.Length, MaxSeedsCount, nameof(seeds));
+
         var len = ProgramDerivedAddressBytes.Length + PublicKeyLength + seeds.Sum(x => x.Length) + 1; // pda header + programId + seeds len + bump
         var buffer = len <= 1024 ? stackalloc byte[len] : new byte[len];
 
@@ -61,14 +66,14 @@ public partial class PublicKey
         foreach (var seed in seeds)
         {
             ArgumentOutOfRangeException.ThrowIfGreaterThan(seed.Length, PublicKeyLength, nameof(seed));
-            seed.Span.CopyTo(buffer[offset..]); offset += seed.Length;
+            seed.Span.CopyTo(buffer.Slice(offset, seed.Length)); offset += seed.Length;
         }
 
         var bumpIndex = offset++;
         buffer[bumpIndex] = 255;
 
-        programId.KeyMemory.Span.CopyTo(buffer[offset..]); offset += PublicKeyLength;
-        ProgramDerivedAddressBytes.Span.CopyTo(buffer[offset..]);
+        programId.KeyMemory.Span.CopyTo(buffer.Slice(offset, PublicKeyLength)); offset += PublicKeyLength;
+        ProgramDerivedAddressBytes.Span.CopyTo(buffer.Slice(offset, ProgramDerivedAddressBytes.Length));
 
         while (buffer[bumpIndex] != 0)
         {
