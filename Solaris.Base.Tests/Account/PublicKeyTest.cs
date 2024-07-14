@@ -1,4 +1,7 @@
-﻿using JetBrains.Annotations;
+﻿using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
+using JetBrains.Annotations;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Solaris.Base.Account;
 
@@ -147,5 +150,20 @@ public class PublicKeyTest
         {
             Assert.AreEqual(onCurve, new PublicKey(pub).IsOnCurve());
         }
+    }
+
+    [TestMethod]
+    public void EqualityTests() // covering Equality
+    {
+        var original = Enumerable.Range(0, 100).Select(_ => new PrivateKey()).ToImmutableArray();
+
+        var doubled = new List<PrivateKey>();
+        foreach (var key in original)
+        {
+            doubled.Add(key);
+            doubled.Add(key);
+        }
+
+        Assert.IsTrue(doubled.Distinct().ToImmutableArray().SequenceEqual(original));
     }
 }

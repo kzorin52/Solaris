@@ -142,10 +142,13 @@ public partial class PublicKey
         return false;
     }
 
+    private int? _hashCode;
+
     /// <inheritdoc cref="GetHashCode()"/>
     public override int GetHashCode()
     {
-        return ByteHelpers.FastHashCode(KeyMemory.Span);
+        // ReSharper disable once NonReadonlyMemberInGetHashCode because KeyMemory is ReadOnly
+        return _hashCode ??= KeyMemory.Span.FastHashCode();
     }
 
     protected bool Equals(PublicKey other)

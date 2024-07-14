@@ -145,10 +145,13 @@ public class PrivateKey // Probably replaces Solnet's Account class
         return false;
     }
 
+    private int? _hashCode;
+
     /// <inheritdoc cref="GetHashCode()"/>
     public override int GetHashCode()
     {
-        return KeyMemory.Span.FastHashCode();
+        // ReSharper disable once NonReadonlyMemberInGetHashCode because KeyMemory is ReadOnly
+        return _hashCode ??= KeyMemory.Span.FastHashCode();
     }
 
     protected bool Equals(PrivateKey other)
