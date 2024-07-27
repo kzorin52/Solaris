@@ -35,7 +35,7 @@ public static class Base58
     /// <param name="result">Raw bytes</param>
     /// <param name="bytesWritten">Count of written to <paramref name="result"/> bytes</param>
     /// <exception cref="EncodingException">Failed decoding</exception>
-    public static void TryDecodeData(ReadOnlySpan<char> data, Span<byte> result, out int bytesWritten)
+    public static void TryDecodeData(ReadOnlySpan<char> data, Span<byte> result, out int bytesWritten) // why exception? maybe bool-based TRY methods?
     {
         var success = SimpleBase.Base58.Bitcoin.TryDecode(data, result, out bytesWritten);
 

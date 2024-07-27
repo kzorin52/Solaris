@@ -2,14 +2,6 @@
 
 public static class ByteHelpers
 {
-    public static int FastHashCode(this byte[] array)
-    {
-        unchecked
-        {
-            return array.Aggregate(0, (current, b) => (current * 31) ^ b);
-        }
-    }
-
     public static int FastHashCode(this ReadOnlySpan<byte> array)
     {
         unchecked

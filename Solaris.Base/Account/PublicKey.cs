@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.Frozen;
+using System.Diagnostics;
 using Solaris.Base.Crypto;
 
 namespace Solaris.Base.Account;
@@ -93,6 +94,13 @@ public partial class PublicKey
     /// <param name="key">The public key as base58-encoded <see cref="string"/></param>
     public PublicKey(string key)
     {
+        if (_generatedDictionary != null && _generatedDictionary.Dictionary.TryGetValue(key, out var cached))
+        {
+            CopyFrom(cached);
+            Console.WriteLine($"Loaded from cache: {cached}");
+            return;
+        }
+
         _keyEncoded = key;
     }
 
@@ -131,6 +139,13 @@ public partial class PublicKey
     public bool IsOnCurve()
     {
         return KeyMemory.Span.IsOnCurve();
+    }
+
+    private void CopyFrom(PublicKey another)
+    {
+        this._keyEncoded = another.Key;
+        this._keyMemory = another.KeyMemory;
+        this._keyBytes = another.KeyBytes;
     }
 
     #region Overrides
