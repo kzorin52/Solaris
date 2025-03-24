@@ -1,15 +1,14 @@
-﻿namespace Solaris.Base.Crypto;
+﻿using System.Runtime.CompilerServices;
+
+namespace Solaris.Base.Crypto;
 
 public static class ByteHelpers
 {
-    public static int FastHashCode(this ReadOnlySpan<byte> array)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int FastHashCodeB32(this ReadOnlySpan<byte> array)
     {
-        unchecked
-        {
-            var result = 0;
-            foreach (var b in array)
-                result = (result * 31) ^ b;
-            return result;
-        }
+        var hashCode = new HashCode();
+        hashCode.AddBytes(array);
+        return hashCode.ToHashCode();
     }
 }

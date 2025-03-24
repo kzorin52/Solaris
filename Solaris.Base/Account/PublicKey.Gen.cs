@@ -1,17 +1,14 @@
 ﻿using System.Collections.Frozen;
-using SimpleBase;
 
 namespace Solaris.Base.Account;
 
 public partial class PublicKey
 {
-    private static ISharedDictionary? _generatedDictionary; 
+    private static ISharedDictionary? _generatedDictionary;
+
     public static void LoadCachedDictionary(ISharedDictionary dictionary)
     {
-        foreach (var entity in dictionary.Dictionary.Values)
-        {
-            _ = entity.GetHashCode();
-        }
+        foreach (var entity in dictionary.Dictionary.Values) _ = entity.GetHashCode();
         _generatedDictionary = dictionary;
     }
 
@@ -24,6 +21,14 @@ public partial class PublicKey
         };
 
         return pub;
+    }
+
+    private void CopyFrom(PublicKey another)
+    {
+        _keyEncoded = another.Key;
+        _keyMemory = another.KeyMemory;
+        _keyBytes = another.KeyBytes;
+        _hashCode = another._hashCode;
     }
 }
 

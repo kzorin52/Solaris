@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <LangVersion>preview</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Solaris.Base\Solaris.Base.csproj"/>
+        <ProjectReference Include="..\Solaris.Borsh\Solaris.Borsh.csproj"/>
+    </ItemGroup>
+
+</Project>

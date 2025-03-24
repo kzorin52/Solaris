@@ -1,24 +1,22 @@
-﻿using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using Solaris.Base.Crypto;
 
 namespace Solaris.Base.Account;
 
 public partial class PublicKey
 {
-    private static readonly ReadOnlyMemory<byte> ProgramDerivedAddressBytes = "ProgramDerivedAddress"u8.ToArray();
     private const int MaxSeedsCount = 16;
+    private static readonly ReadOnlyMemory<byte> ProgramDerivedAddressBytes = "ProgramDerivedAddress"u8.ToArray();
 
     /// <summary>
-    /// Derives a program address
+    ///     Derives a program address
     /// </summary>
     /// <param name="seeds">The address seeds</param>
     /// <param name="programId">The program ID</param>
     /// <param name="publicKey">The derived public key, returned as inline out</param>
     /// <returns>true if it could derive the program address for the given seeds, otherwise false</returns>
     /// <exception cref="ArgumentOutOfRangeException">Throws exception when one of the seeds has an invalid length</exception>
-    public static bool TryCreateProgramAddress(ICollection<ReadOnlyMemory<byte>> seeds, PublicKey programId, out PublicKey publicKey)
+    public static bool TryCreateProgramAddress(ICollection<byte[]> seeds, PublicKey programId, out PublicKey publicKey)
     {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(seeds.Count, MaxSeedsCount, nameof(seeds));
 
@@ -29,7 +27,7 @@ public partial class PublicKey
         foreach (var seed in seeds)
         {
             ArgumentOutOfRangeException.ThrowIfGreaterThan(seed.Length, PublicKeyLength, nameof(seed));
-            seed.Span.CopyTo(buffer.Slice(offset, seed.Length));
+            seed.AsSpan().CopyTo(buffer.Slice(offset, seed.Length));
             offset += seed.Length;
         }
 
@@ -50,44 +48,51 @@ public partial class PublicKey
     }
 
     /// <summary>
-    /// Attempts to find a program address for the passed seeds and program ID
+    ///     Attempts to find a program address for the passed seeds and program ID
     /// </summary>
     /// <param name="programId"></param>
     /// <param name="seeds"></param>
     /// <returns></returns>
-    public static (PublicKey? Key, byte Bump) FindProgramAddress(PublicKey programId, params ReadOnlyMemory<byte>[] seeds)
+    public static (PublicKey? Key, byte Bump) FindProgramAddress(PublicKey programId, params ReadOnlySpan<byte[]> seeds)
     {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(seeds.Length, MaxSeedsCount, nameof(seeds));
 
-        var len = ProgramDerivedAddressBytes.Length + PublicKeyLength + seeds.Sum(x => x.Length) + 1; // pda header + programId + seeds len + bump
+        var len = ProgramDerivedAddressBytes.Length + PublicKeyLength + 1;
+        foreach (var seed in seeds) len += seed.Length;
+
         var buffer = len <= 1024 ? stackalloc byte[len] : new byte[len];
 
         var offset = 0;
         foreach (var seed in seeds)
         {
             ArgumentOutOfRangeException.ThrowIfGreaterThan(seed.Length, PublicKeyLength, nameof(seed));
-            seed.Span.CopyTo(buffer.Slice(offset, seed.Length)); offset += seed.Length;
+            seed.AsSpan().CopyTo(buffer.Slice(offset, seed.Length));
+            offset += seed.Length;
         }
 
-        var bumpIndex = offset++;
-        buffer[bumpIndex] = 255;
+        ref var bump = ref buffer[offset++];
+        bump = 255;
 
-        programId.KeyMemory.Span.CopyTo(buffer.Slice(offset, PublicKeyLength)); offset += PublicKeyLength;
+        programId.KeyMemory.Span.CopyTo(buffer.Slice(offset, PublicKeyLength));
+        offset += PublicKeyLength;
         ProgramDerivedAddressBytes.Span.CopyTo(buffer.Slice(offset, ProgramDerivedAddressBytes.Length));
 
-        while (buffer[bumpIndex] != 0)
-        {
-            var hash = SHA256.HashData(buffer);
-            if (!hash.IsOnCurve()) return (hash, buffer[bumpIndex]);
+        var hash = new byte[32];
+        var hashSpan = hash.AsSpan();
 
-            buffer[bumpIndex]--;
+        while (bump != 0)
+        {
+            SHA256.TryHashData(buffer, hashSpan, out _);
+            if (!hash.IsOnCurve()) return (hash, bump);
+
+            --bump;
         }
 
-        return (null, buffer[bumpIndex]);
+        return (null, bump);
     }
 
     /// <summary>
-    /// Derives a new public key from an existing public key and seed
+    ///     Derives a new public key from an existing public key and seed
     /// </summary>
     /// <param name="fromPublicKey"></param>
     /// <param name="seed"></param>

@@ -1,18 +1,22 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-	<PropertyGroup>
-		<TargetFramework>net9.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
 
-		<LangVersion>preview</LangVersion>
-		<AnalysisLevel>preview</AnalysisLevel>
-		<AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
-	</PropertyGroup>
+        <LangVersion>preview</LangVersion>
+        <AnalysisLevel>preview</AnalysisLevel>
+        <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
 
-	<ItemGroup>
-	  <PackageReference Include="BouncyCastle.Cryptography" Version="2.4.0" />
-	  <PackageReference Include="SimpleBase" Version="4.0.0" />
-	</ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="SimpleBase" Version="4.0.2"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\reposCat\bc-csharp\crypto\src\BouncyCastle.Crypto.csproj" PrivateAssets="all"/>
+    </ItemGroup>
 
 </Project>

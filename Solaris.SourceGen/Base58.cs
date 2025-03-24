@@ -38,10 +38,9 @@ internal static class Base58
         {
         }
 
-        var resultReversed = result
-            .ToByteArray()
-            .Reverse()
-            .ToArray();
+        var resultReversed = Enumerable.Reverse<byte>(result
+            .ToByteArray()).ToArray();
+
         int firstNonZero;
         for (firstNonZero = 0;
              (firstNonZero < resultReversed.Length) && (resultReversed[firstNonZero] == 0);

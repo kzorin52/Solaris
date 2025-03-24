@@ -1,19 +1,42 @@
-﻿using System.Collections.Frozen;
-using System.Diagnostics;
+﻿using System.Diagnostics;
+using Org.BouncyCastle.Math.EC.Rfc8032;
 using Solaris.Base.Crypto;
 
 namespace Solaris.Base.Account;
 
 /// <summary>
-/// Implements the public key functionality
+///     Implements the public key functionality
 /// </summary>
 [DebuggerDisplay("PublicKey = {ToString()}")]
 public partial class PublicKey
 {
     /// <summary>
-    /// Public key length
+    ///     Public key length
     /// </summary>
     public const int PublicKeyLength = 32;
+
+    /// <summary>
+    ///     Verify the signed message
+    /// </summary>
+    /// <param name="message"></param>
+    /// <param name="messageOffset">Message offset, when null sets to zero</param>
+    /// <param name="messageLength">Message length, when null sets to <paramref name="message" />.Length</param>
+    /// <param name="signature"></param>
+    /// <param name="signatureOffset">Signature offset, when null sets to zero</param>
+    /// <returns></returns>
+    public bool Verify(byte[] message, byte[] signature, int? messageOffset = null, int? messageLength = null, int? signatureOffset = null)
+    {
+        return Ed25519.Verify(signature, signatureOffset ?? 0, KeyBytes, 0, message, messageOffset ?? 0, messageLength ?? message.Length);
+    }
+
+    /// <summary>
+    ///     Checks if this object is a valid Ed25519 PublicKey
+    /// </summary>
+    /// <returns>Returns true if it is a valid key, false otherwise</returns>
+    public bool IsOnCurve()
+    {
+        return KeyMemory.Span.IsOnCurve();
+    }
 
     #region Encodings
 
@@ -22,21 +45,18 @@ public partial class PublicKey
     private byte[]? _keyBytes;
 
     /// <summary>
-    /// Public key represented as base58-encoded string
+    ///     Public key represented as base58-encoded string
     /// </summary>
     public string Key => _keyEncoded ??= Base58.EncodeData(KeyMemory.Span);
 
     /// <summary>
-    /// Public key represented as <see cref="ReadOnlyMemory{T}"/>
+    ///     Public key represented as <see cref="ReadOnlyMemory{T}" />
     /// </summary>
     public ReadOnlyMemory<byte> KeyMemory
     {
         get
         {
-            if (_keyMemory != null)
-            {
-                return _keyMemory.Value;
-            }
+            if (_keyMemory != null) return _keyMemory.Value;
 
             if (_keyBytes != null)
             {
@@ -46,9 +66,9 @@ public partial class PublicKey
 
             if (_keyEncoded != null)
             {
-                Memory<byte> memory = new byte[PublicKeyLength];
-                Base58.TryDecodeData(_keyEncoded, memory.Span, out _);
-                _keyMemory = memory;
+                _keyBytes = new byte[PublicKeyLength];
+                Base58.TryDecodeData(_keyEncoded, _keyBytes, out _);
+                _keyMemory = _keyBytes;
 
                 return _keyMemory.Value;
             }
@@ -58,7 +78,7 @@ public partial class PublicKey
     }
 
     /// <summary>
-    /// Public key represented as byte[]
+    ///     Public key represented as byte[]
     /// </summary>
     public byte[] KeyBytes => _keyBytes ??= KeyMemory.ToArray(); // maybe ImmutableArray<byte>?
 
@@ -67,7 +87,7 @@ public partial class PublicKey
     #region Constructors
 
     /// <summary>
-    /// Initialize the public key from the given byte array
+    ///     Initialize the public key from the given byte array
     /// </summary>
     /// <param name="key">The public key as byte array</param>
     public PublicKey(byte[] key)
@@ -78,9 +98,9 @@ public partial class PublicKey
     }
 
     /// <summary>
-    /// Initialize the public key from the given <see cref="ReadOnlyMemory{T}"/>
+    ///     Initialize the public key from the given <see cref="ReadOnlyMemory{T}" />
     /// </summary>
-    /// <param name="key">The public key as <see cref="ReadOnlyMemory{T}"/></param>
+    /// <param name="key">The public key as <see cref="ReadOnlyMemory{T}" /></param>
     public PublicKey(ReadOnlyMemory<byte> key)
     {
         if (key.Length != PublicKeyLength)
@@ -89,15 +109,15 @@ public partial class PublicKey
     }
 
     /// <summary>
-    /// Initialize the public key from the given base58-encoded <see cref="string"/>
+    ///     Initialize the public key from the given base58-encoded <see cref="string" />
     /// </summary>
-    /// <param name="key">The public key as base58-encoded <see cref="string"/></param>
+    /// <param name="key">The public key as base58-encoded <see cref="string" /></param>
     public PublicKey(string key)
     {
         if (_generatedDictionary != null && _generatedDictionary.Dictionary.TryGetValue(key, out var cached))
         {
+            //Console.WriteLine("hit");
             CopyFrom(cached);
-            Console.WriteLine($"Loaded from cache: {cached}");
             return;
         }
 
@@ -108,49 +128,41 @@ public partial class PublicKey
 
     #region Implict casts
 
-    public static implicit operator PublicKey(string encodedKey) => new(encodedKey);
-    public static implicit operator PublicKey(byte[] rawKey) => new(rawKey);
-    public static implicit operator PublicKey(ReadOnlyMemory<byte> rawKey) => new(rawKey);
+    public static implicit operator PublicKey(string encodedKey)
+    {
+        return new PublicKey(encodedKey);
+    }
 
-    public static implicit operator string(PublicKey key) => key.Key;
-    public static implicit operator byte[](PublicKey key) => key.KeyBytes;
-    public static implicit operator ReadOnlyMemory<byte>(PublicKey key) => key.KeyMemory;
+    public static implicit operator PublicKey(byte[] rawKey)
+    {
+        return new PublicKey(rawKey);
+    }
+
+    public static implicit operator PublicKey(ReadOnlyMemory<byte> rawKey)
+    {
+        return new PublicKey(rawKey);
+    }
+
+    public static implicit operator string(PublicKey key)
+    {
+        return key.Key;
+    }
+
+    public static implicit operator byte[](PublicKey key)
+    {
+        return key.KeyBytes;
+    }
+
+    public static implicit operator ReadOnlyMemory<byte>(PublicKey key)
+    {
+        return key.KeyMemory;
+    }
 
     #endregion
 
-    /// <summary>
-    /// Verify the signed message
-    /// </summary>
-    /// <param name="message"></param>
-    /// <param name="messageOffset">Message offset, when null sets to zero</param>
-    /// <param name="messageLength">Message length, when null sets to <paramref name="message"/>.Length</param>
-    /// <param name="signature"></param>
-    /// <param name="signatureOffset">Signature offset, when null sets to zero</param>
-    /// <returns></returns>
-    public bool Verify(byte[] message, byte[] signature, int? messageOffset = null, int? messageLength = null, int? signatureOffset = null)
-    {
-        return Org.BouncyCastle.Math.EC.Rfc8032.Ed25519.Verify(signature, signatureOffset ?? 0, KeyBytes, 0, message, messageOffset ?? 0, messageLength ?? message.Length);
-    }
-    
-    /// <summary>
-    /// Checks if this object is a valid Ed25519 PublicKey
-    /// </summary>
-    /// <returns>Returns true if it is a valid key, false otherwise</returns>
-    public bool IsOnCurve()
-    {
-        return KeyMemory.Span.IsOnCurve();
-    }
-
-    private void CopyFrom(PublicKey another)
-    {
-        this._keyEncoded = another.Key;
-        this._keyMemory = another.KeyMemory;
-        this._keyBytes = another.KeyBytes;
-    }
-
     #region Overrides
 
-    /// <inheritdoc cref="Equals(object)"/>
+    /// <inheritdoc cref="Equals(object)" />
     public override bool Equals(object? obj)
     {
         if (obj is PublicKey pk) return Equals(pk);
@@ -159,25 +171,25 @@ public partial class PublicKey
 
     private int? _hashCode;
 
-    /// <inheritdoc cref="GetHashCode()"/>
+    /// <inheritdoc cref="GetHashCode()" />
     public override int GetHashCode()
     {
         // ReSharper disable once NonReadonlyMemberInGetHashCode because KeyMemory is ReadOnly
-        return _hashCode ??= KeyMemory.Span.FastHashCode();
+        return _hashCode ??= KeyMemory.Span.FastHashCodeB32();
     }
 
-    protected bool Equals(PublicKey other)
+    private bool Equals(PublicKey other)
     {
-        if (other._keyEncoded != null && _keyEncoded != null)
-        {
-            return other._keyEncoded == _keyEncoded;
-        }
+        if (other._keyEncoded != null && _keyEncoded != null) return other._keyEncoded == _keyEncoded;
 
         return KeyMemory.Span.SequenceEqual(other.KeyMemory.Span);
     }
 
-    /// <inheritdoc cref="ToString"/>
-    public override string ToString() => Key;
+    /// <inheritdoc cref="ToString" />
+    public override string ToString()
+    {
+        return Key;
+    }
 
     #endregion
 
@@ -185,20 +197,17 @@ public partial class PublicKey
 
     public static bool operator ==(PublicKey? lhs, PublicKey? rhs)
     {
-        if (lhs is null && rhs is null)
-        {
-            return true;
-        }
+        if (lhs is null && rhs is null) return true;
 
-        if (lhs is null || rhs is null)
-        {
-            return false;
-        }
+        if (lhs is null || rhs is null) return false;
 
         return lhs.Equals(rhs);
     }
 
-    public static bool operator !=(PublicKey? lhs, PublicKey? rhs) => !(lhs == rhs);
+    public static bool operator !=(PublicKey? lhs, PublicKey? rhs)
+    {
+        return !(lhs == rhs);
+    }
 
     #endregion
 }
