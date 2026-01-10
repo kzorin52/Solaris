@@ -253,7 +253,7 @@ public class PrivateKey // Probably replaces Solnet's Account class
     public override int GetHashCode()
     {
         // ReSharper disable once NonReadonlyMemberInGetHashCode because KeyMemory is ReadOnly
-        return _hashCode ??= KeyMemory.Span.FastHashCodeB32();
+        return _hashCode ??= KeyMemory.Span.FastHashCode();
     }
 
     protected bool Equals(PrivateKey other)

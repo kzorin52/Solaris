@@ -34,7 +34,6 @@ public class AccountMeta
 
 public class CompiledAccountMeta
 {
-    public bool IsInvoked;
     public bool IsSigner;
     public bool IsWritable;
 
