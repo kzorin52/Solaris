@@ -18,3 +18,8 @@ public static class MemoV1Program
         };
     }
 }
+
+public static class MemoV2Program
+{
+    public static readonly PublicKey ProgramId = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
+}

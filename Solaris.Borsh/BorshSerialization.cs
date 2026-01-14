@@ -47,6 +47,12 @@ public ref struct BorshSerializer(Span<byte> buffer)
         Offset += value.Length;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Write(IBorshSerializable value)
+    {
+        value.Serialize(ref this);
+    }
+
     public void WriteRLE(int len)
     {
         var remLen = len;
@@ -99,6 +105,13 @@ public ref struct FluentSerializer
         _serializer.Write(value);
         return this;
     }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public FluentSerializer Write(IBorshSerializable value)
+    {
+        _serializer.Write(value);
+        return this;
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public FluentSerializer WriteInteger<T>(T value) where T : unmanaged
@@ -119,4 +132,10 @@ public ref struct FluentSerializer
     {
         return _buffer;
     }
+}
+
+public interface IBorshSerializable
+{
+    public int Size();
+    public void Serialize(ref BorshSerializer ser);
 }

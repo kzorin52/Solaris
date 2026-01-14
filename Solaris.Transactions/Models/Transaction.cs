@@ -85,6 +85,11 @@ public class Transaction
         return msg;
     }
 
+    public byte[] Build()
+    {
+        return BuildMessage().BuildTransaction(Signers);
+    }
+
     /// <summary>
     ///     Collects all unique accounts from the instructions and aggregates their metadata (signer/writable/invoked).
     /// </summary>
@@ -92,6 +97,12 @@ public class Transaction
     private Dictionary<PublicKey, CompiledAccountMeta> CollectKeys()
     {
         var accountMetaMap = new Dictionary<PublicKey, CompiledAccountMeta>(Instructions!.Sum(x => x.Keys.Length + 1));
+
+        if (ExternalFeePayer != null)
+        {
+            accountMetaMap[ExternalFeePayer] = new CompiledAccountMeta { IsSigner = true };
+        }
+        
         foreach (var ix in Instructions!)
         {
             // Handle Program ID

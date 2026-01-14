@@ -1,9 +1,10 @@
 ﻿using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Solaris.Base.Account;
 
 namespace Solaris.Borsh;
 
-public ref struct BorshDeserialization(ReadOnlySpan<byte> data)
+public ref struct BorshDeserializer(ReadOnlySpan<byte> data)
 {
     public int Offset;
     private readonly ReadOnlySpan<byte> _data = data;
@@ -27,6 +28,14 @@ public ref struct BorshDeserialization(ReadOnlySpan<byte> data)
 
         return span;
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Skip(int size)
+    {
+        Offset += size;
+    }
+
+    public PublicKey PublicKey() => Span(32).ToArray();
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public byte Byte()

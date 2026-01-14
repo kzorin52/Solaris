@@ -40,7 +40,7 @@ public class PrivateKey // Probably replaces Solnet's Account class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Sign(ReadOnlySpan<byte> message, Span<byte> signature)
     {
-        Ed25519.Sign(KeyMemory.Span, message, signature);
+        Ed25519.Sign(SecretKeyBytes, message, signature);
     }
 
     /// <summary>
