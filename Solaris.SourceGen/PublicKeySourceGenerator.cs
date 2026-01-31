@@ -31,9 +31,11 @@ public class PublicKeyCastDetectorGenerator : IIncrementalGenerator
         {
             // For each kind, check if it involves PublicKey
             CastExpressionSyntax castExp when IsCastPublicKey(castExp, context.SemanticModel) => castExp,
-            LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.StringLiteralExpression) && IsCastPublicKey(literal, context.SemanticModel) => literal,
+            LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.StringLiteralExpression) &&
+                                                 IsCastPublicKey(literal, context.SemanticModel) => literal,
             ObjectCreationExpressionSyntax ctor when IsStringCtorPublicKey(ctor, context.SemanticModel) => ctor,
-            ImplicitObjectCreationExpressionSyntax implCtor when IsStringCtorPublicKey(implCtor, context.SemanticModel) => implCtor,
+            ImplicitObjectCreationExpressionSyntax implCtor when IsStringCtorPublicKey(implCtor, context.SemanticModel)
+                => implCtor,
             _ => null
         };
     }
@@ -41,7 +43,7 @@ public class PublicKeyCastDetectorGenerator : IIncrementalGenerator
     private static bool IsStringCtorPublicKey(ExpressionSyntax expression, SemanticModel model)
     {
         if (model.GetSymbolInfo(expression).Symbol is IMethodSymbol symbol)
-            return symbol.OriginalDefinition.ToString() == 
+            return symbol.OriginalDefinition.ToString() ==
                    "Solaris.Base.Account.PublicKey.PublicKey(string)"; // new PublicKey(string) constructor
 
         return false;
@@ -94,8 +96,10 @@ public class PublicKeyCastDetectorGenerator : IIncrementalGenerator
             {
                 CastExpressionSyntax cast => ((LiteralExpressionSyntax)cast.Expression).Token.ValueText,
                 LiteralExpressionSyntax implCast => implCast.Token.ValueText,
-                ObjectCreationExpressionSyntax ctor => ((LiteralExpressionSyntax)ctor.ArgumentList!.Arguments[0].Expression).Token.ValueText,
-                ImplicitObjectCreationExpressionSyntax ctor => ((LiteralExpressionSyntax)ctor.ArgumentList!.Arguments[0].Expression).Token.ValueText,
+                ObjectCreationExpressionSyntax ctor => ((LiteralExpressionSyntax)ctor.ArgumentList!.Arguments[0]
+                    .Expression).Token.ValueText,
+                ImplicitObjectCreationExpressionSyntax ctor => ((LiteralExpressionSyntax)ctor.ArgumentList!.Arguments[0]
+                    .Expression).Token.ValueText,
                 _ => null
             })
             .Where(x => x != null)

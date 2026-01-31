@@ -80,6 +80,7 @@ public class PublicKeyTest
     }
 
     private static readonly PublicKey CandyMachineProgram = "ArAA6CZC123yMJLUe4uisBEgvfuw2WEvex9iFmFCYiXv";
+
     public static PublicKey GetExtensions(PublicKey candyMachine)
     {
         return PublicKey.FindProgramAddress(CandyMachineProgram, "extension"u8.ToArray(), candyMachine).Key;
@@ -146,10 +147,7 @@ public class PublicKeyTest
     [TestMethod]
     public void OnCurveTests() // covering Ed25519Extensions
     {
-        foreach (var (pub, onCurve) in OnCurveCases)
-        {
-            Assert.AreEqual(onCurve, new PublicKey(pub).IsOnCurve());
-        }
+        foreach (var (pub, onCurve) in OnCurveCases) Assert.AreEqual(onCurve, new PublicKey(pub).IsOnCurve());
     }
 
     [TestMethod]

@@ -1,5 +1,6 @@
 ﻿using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 using Solaris.Base.Account;
 
 namespace Solaris.Borsh;
@@ -35,12 +36,29 @@ public ref struct BorshDeserializer(ReadOnlySpan<byte> data)
         Offset += size;
     }
 
-    public PublicKey PublicKey() => Span(32).ToArray();
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public PublicKey PublicKey()
+    {
+        return Span(32).ToArray();
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public byte Byte()
     {
         return _data[Offset++];
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Bool()
+    {
+        return Byte() == 1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public string String()
+    {
+        var valueByteCount = Integer<int>();
+        return Encoding.UTF8.GetString(Span(valueByteCount));
     }
 }
 
@@ -51,4 +69,10 @@ public static class BorshDeserializationExtensions
     {
         return MemoryMarshal.Read<T>(data[..sizeof(T)]);
     }
+}
+
+public abstract class BorshDeserializable
+{
+    public PublicKey? PublicKey { get; set; }
+    public abstract BorshDeserializable Update(ReadOnlySpan<byte> data, PublicKey? publicKey = null);
 }

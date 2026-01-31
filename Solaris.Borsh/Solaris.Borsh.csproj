@@ -8,7 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\Solaris.Base\Solaris.Base.csproj" />
+        <ProjectReference Include="..\Solaris.Base\Solaris.Base.csproj"/>
     </ItemGroup>
 
 </Project>

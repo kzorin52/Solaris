@@ -6,7 +6,7 @@ namespace Solaris.Base.Account;
 public partial class PublicKey
 {
     private const int MaxSeedsCount = 16;
-    private static readonly ReadOnlyMemory<byte> ProgramDerivedAddressBytes = "ProgramDerivedAddress"u8.ToArray();
+    private static ReadOnlySpan<byte> ProgramDerivedAddressBytes => "ProgramDerivedAddress"u8;
 
     /// <summary>
     ///     Derives a program address
@@ -16,11 +16,14 @@ public partial class PublicKey
     /// <param name="publicKey">The derived public key, returned as inline out</param>
     /// <returns>true if it could derive the program address for the given seeds, otherwise false</returns>
     /// <exception cref="ArgumentOutOfRangeException">Throws exception when one of the seeds has an invalid length</exception>
-    public static bool TryCreateProgramAddress(ICollection<byte[]> seeds, PublicKey programId, out PublicKey publicKey)
+    public static bool TryCreateProgramAddress(PublicKey programId, out PublicKey publicKey, params ReadOnlySpan<byte[]> seeds)
     {
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(seeds.Count, MaxSeedsCount, nameof(seeds));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(seeds.Length, MaxSeedsCount, nameof(seeds));
 
-        var len = ProgramDerivedAddressBytes.Length + PublicKeyLength + seeds.Sum(x => x.Length); // pda header + programId + seeds len
+        var len = ProgramDerivedAddressBytes.Length + PublicKeyLength;
+        foreach (var seed in seeds)
+            len += seed.Length; // pda header + programId + seeds len
+        
         var buffer = len <= 1024 ? stackalloc byte[len] : new byte[len];
 
         var offset = 0;
@@ -34,17 +37,12 @@ public partial class PublicKey
         programId.KeyMemory.Span.CopyTo(buffer.Slice(offset, PublicKeyLength));
         offset += PublicKeyLength;
 
-        ProgramDerivedAddressBytes.Span.CopyTo(buffer.Slice(offset, ProgramDerivedAddressBytes.Length));
+        ProgramDerivedAddressBytes.CopyTo(buffer.Slice(offset, ProgramDerivedAddressBytes.Length));
 
         var hash = SHA256.HashData(buffer);
-        if (hash.IsOnCurve())
-        {
-            publicKey = new PublicKey(hash);
-            return false;
-        }
-
         publicKey = new PublicKey(hash);
-        return true;
+        
+        return !hash.IsOnCurve();
     }
 
     /// <summary>
@@ -75,7 +73,7 @@ public partial class PublicKey
 
         programId.KeyMemory.Span.CopyTo(buffer.Slice(offset, PublicKeyLength));
         offset += PublicKeyLength;
-        ProgramDerivedAddressBytes.Span.CopyTo(buffer.Slice(offset, ProgramDerivedAddressBytes.Length));
+        ProgramDerivedAddressBytes.CopyTo(buffer.Slice(offset, ProgramDerivedAddressBytes.Length));
 
         var hash = new byte[32];
         var hashSpan = hash.AsSpan();

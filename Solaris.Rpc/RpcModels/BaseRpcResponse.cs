@@ -11,20 +11,16 @@ public class BaseRpcResponse<T>
 
 public class ContextWrapped<T>
 {
-    [JsonPropertyName("context")] 
-    public RpcContext? Context { get; set; }
+    [JsonPropertyName("context")] public RpcContext? Context { get; set; }
 
-    [JsonPropertyName("value")] 
-    public T? Value { get; set; }
+    [JsonPropertyName("value")] public T? Value { get; set; }
 }
 
 public class RpcContext
 {
-    [JsonPropertyName("apiVersion")] 
-    public string? ApiVersion { get; set; }
-    
-    [JsonPropertyName("slot")] 
-    public ulong Slot { get; set; }
+    [JsonPropertyName("apiVersion")] public string? ApiVersion { get; set; }
+
+    [JsonPropertyName("slot")] public ulong Slot { get; set; }
 }
 
 public class SolanaRpcError

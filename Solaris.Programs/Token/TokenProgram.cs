@@ -2,13 +2,14 @@
 using Solaris.Borsh;
 using Solaris.Transactions.Models;
 
-namespace Solaris.Programs;
+namespace Solaris.Programs.Token;
 
 public static class TokenProgram
 {
     public static readonly PublicKey ProgramId = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
-    public static TransactionInstruction Transfer(PublicKey sourceTokenAccount, PublicKey destinationTokenAccount, ulong amount, PublicKey authority)
+    public static TransactionInstruction Transfer(PublicKey sourceTokenAccount, PublicKey destinationTokenAccount,
+        ulong amount, PublicKey authority)
     {
         return new TransactionInstruction
         {
@@ -23,7 +24,8 @@ public static class TokenProgram
         };
     }
 
-    public static TransactionInstruction CloseAccount(PublicKey sourceTokenAccount, PublicKey feeDestination, PublicKey authority)
+    public static TransactionInstruction CloseAccount(PublicKey sourceTokenAccount, PublicKey feeDestination,
+        PublicKey authority)
     {
         return new TransactionInstruction
         {

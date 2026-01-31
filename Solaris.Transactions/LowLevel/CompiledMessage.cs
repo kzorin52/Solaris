@@ -69,7 +69,7 @@ public struct CompiledMessage
         // 32 bytes for RecentBlockHash
         // 1 byte for Instructions count
         var bufferLen = 3 + 1 + Accounts.Length * 32 + 32 + 1;
-        
+
         foreach (ref var instruction in Instructions.AsSpan())
             // For each instruction:
             // Data length + KeyIndices length + 1 byte (ProgramIdIndex) + 2 bytes (KeyIndices count + Data count)

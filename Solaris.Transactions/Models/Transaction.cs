@@ -98,11 +98,8 @@ public class Transaction
     {
         var accountMetaMap = new Dictionary<PublicKey, CompiledAccountMeta>(Instructions!.Sum(x => x.Keys.Length + 1));
 
-        if (ExternalFeePayer != null)
-        {
-            accountMetaMap[ExternalFeePayer] = new CompiledAccountMeta { IsSigner = true };
-        }
-        
+        if (ExternalFeePayer != null) accountMetaMap[ExternalFeePayer] = new CompiledAccountMeta { IsSigner = true };
+
         foreach (var ix in Instructions!)
         {
             // Handle Program ID

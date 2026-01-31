@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Solaris.Programs.Token;
 using Solaris.Rpc.RpcModels;
 
 namespace Solaris.Rpc;
@@ -51,6 +52,7 @@ public class SolanaRpcClient(string rpcUri) : IDisposable
         request.Content = content;
 
         using var postResp = await _cli.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+        
         await using var contentStream = await postResp.EnsureSuccessStatusCode().Content.ReadAsStreamAsync();
 
         var json = await JsonSerializer.DeserializeAsync<TResponse>(contentStream);
@@ -90,7 +92,7 @@ public class SolanaRpcClient(string rpcUri) : IDisposable
     public async Task<SolanaAccount?> GetAccountInfo(string account, string commitment = "processed",
         string encoding = "base64", DataSlice? dataSlice = null)
     {
-        return (await QueryJsonRpcAsync<SolanaAccount>("getAccountInfo", (object?[])
+        return (await QueryJsonRpcUnwrapContextAsync<SolanaAccount>("getAccountInfo", (object?[])
         [
             account,
             new
@@ -135,6 +137,30 @@ public class SolanaRpcClient(string rpcUri) : IDisposable
             transaction,
             config ?? new SimulateTransactionConfig()
         ]))!;
+    }
+
+    public async Task<TokenAccount[]> GetTokenAccountsByOwner(string owner, string programId, string? mint = null,
+        string commitment = "processed")
+    {
+        var gtaResp = (await QueryJsonRpcUnwrapContextAsync<GPASingleResult[]>("getTokenAccountsByOwner", (object?[])
+        [
+            owner,
+            new
+            {
+                mint,
+                programId
+            },
+            new
+            {
+                commitment,
+                encoding = "base64"
+            }
+        ]))!;
+
+        var result = new TokenAccount[gtaResp.Length];
+        for (var i = 0; i < gtaResp.Length; i++) result[i] = new TokenAccount(gtaResp[i].DataSpan);
+
+        return result;
     }
 }
 

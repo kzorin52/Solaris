@@ -32,7 +32,8 @@ public class PrivateKey // Probably replaces Solnet's Account class
     public byte[] Sign(byte[] message, int? messageOffset = null, int? messageLength = null)
     {
         var sig = new byte[64];
-        Ed25519.Sign(SecretKeyBytes, 0, PublicKey.KeyBytes, 0, message, messageOffset ?? 0, messageLength ?? message.Length, sig, 0);
+        Ed25519.Sign(SecretKeyBytes, 0, PublicKey.KeyBytes, 0, message, messageOffset ?? 0,
+            messageLength ?? message.Length, sig, 0);
 
         return sig;
     }

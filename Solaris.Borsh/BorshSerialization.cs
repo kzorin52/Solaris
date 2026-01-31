@@ -32,7 +32,7 @@ public ref struct BorshSerializer(Span<byte> buffer)
         MemoryMarshal.Write(Buffer[Offset..], value);
         Offset += sizeof(T);
     }
-    
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public unsafe void Write<T>(ref T value) where T : unmanaged
     {
@@ -105,7 +105,7 @@ public ref struct FluentSerializer
         _serializer.Write(value);
         return this;
     }
-    
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public FluentSerializer Write(IBorshSerializable value)
     {

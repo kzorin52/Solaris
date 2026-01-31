@@ -79,8 +79,10 @@ public class PrivateKeyTest
 
     #region Signature Cases
 
-    private static readonly PrivateKey SignatureAccount = "5zVUbi16FLVK8Tsji1HE2ZH3y4Ypjgf9WSipR15aphDenCh36BRibYDMXe9ZFzqXds2GZLkiQkY9VnZ5f4Kzcqts";
-    private static readonly (string message, string sig)[] SignatureCases = 
+    private static readonly PrivateKey SignatureAccount =
+        "5zVUbi16FLVK8Tsji1HE2ZH3y4Ypjgf9WSipR15aphDenCh36BRibYDMXe9ZFzqXds2GZLkiQkY9VnZ5f4Kzcqts";
+
+    private static readonly (string message, string sig)[] SignatureCases =
     [
         ("BECgu2DVnPiNDm", "5iE5WYxrMKY8e8vJauGGM5bra5CH9Dvg7FC284JMCG5FqCh2Ki6N9dRV2fvdyeCv1qP3mRsimFEz6KoQ3rQBys17"),
         ("DT6BVn5jZ35C9V", "59KT1hCtyGB1QJvtNu3VLmZGFT3vgk3QYmPDK4AMroaEMLrZwrc1YBm71F68hx7ZoXxwDaMNgbjZt7jmGXqTxpF8"),
