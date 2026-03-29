@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using Org.BouncyCastle.Math.EC.Rfc8032;
 using Solaris.Base.Crypto;
 
@@ -18,17 +19,9 @@ public partial class PublicKey
     /// <summary>
     ///     Verify the signed message
     /// </summary>
-    /// <param name="message"></param>
-    /// <param name="messageOffset">Message offset, when null sets to zero</param>
-    /// <param name="messageLength">Message length, when null sets to <paramref name="message" />.Length</param>
-    /// <param name="signature"></param>
-    /// <param name="signatureOffset">Signature offset, when null sets to zero</param>
-    /// <returns></returns>
-    public bool Verify(byte[] message, byte[] signature, int? messageOffset = null, int? messageLength = null,
-        int? signatureOffset = null)
+    public bool Verify(ReadOnlySpan<byte> message, ReadOnlySpan<byte> signature)
     {
-        return Ed25519.Verify(signature, signatureOffset ?? 0, KeyBytes, 0, message, messageOffset ?? 0,
-            messageLength ?? message.Length);
+        return Ed25519.Verify(signature, KeySpan, message);
     }
 
     /// <summary>
@@ -37,77 +30,67 @@ public partial class PublicKey
     /// <returns>Returns true if it is a valid key, false otherwise</returns>
     public bool IsOnCurve()
     {
-        return KeyMemory.Span.IsOnCurve();
+        return KeySpan.IsOnCurve();
     }
 
     #region Encodings
 
     private string? _keyEncoded;
-    private ReadOnlyMemory<byte>? _keyMemory;
-    private byte[]? _keyBytes;
+
+    private PublicKeyValue _keyDecoded;
+    private bool _isDecoded;
 
     /// <summary>
     ///     Public key represented as base58-encoded string
     /// </summary>
-    public string Key => _keyEncoded ??= Base58.EncodeData(KeyMemory.Span);
+    public string Key => _keyEncoded ??= Base58.EncodeData(KeySpan);
 
     /// <summary>
-    ///     Public key represented as <see cref="ReadOnlyMemory{T}" />
+    ///     Public key represented as <see cref="ReadOnlySpan{byte}" />
     /// </summary>
-    public ReadOnlyMemory<byte> KeyMemory
+    public ReadOnlySpan<byte> KeySpan => KeyValue.AsSpan();
+
+    public ref readonly PublicKeyValue KeyValue
     {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
-            if (_keyMemory != null) return _keyMemory.Value;
-
-            if (_keyBytes != null)
+            if (!_isDecoded)
             {
-                _keyMemory = _keyBytes;
-                return _keyMemory!.Value;
+                if (_keyEncoded == null) throw new InvalidOperationException();
+                Span<byte> tmp = stackalloc byte[PublicKeyLength];
+                Base58.TryDecodeData(_keyEncoded, tmp, out _);
+                _keyDecoded = PublicKeyValue.Create(tmp);
+                _isDecoded = true;
             }
 
-            if (_keyEncoded != null)
-            {
-                _keyBytes = new byte[PublicKeyLength];
-                Base58.TryDecodeData(_keyEncoded, _keyBytes, out _);
-                _keyMemory = _keyBytes;
-
-                return _keyMemory.Value;
-            }
-
-            return null;
+            return ref _keyDecoded;
         }
     }
-
-    /// <summary>
-    ///     Public key represented as byte[]
-    /// </summary>
-    public byte[] KeyBytes => _keyBytes ??= KeyMemory.ToArray(); // maybe ImmutableArray<byte>?
 
     #endregion
 
     #region Constructors
 
     /// <summary>
-    ///     Initialize the public key from the given byte array
+    ///     Initialize the public key from the given <see cref="ReadOnlySpan{T}" />
     /// </summary>
-    /// <param name="key">The public key as byte array</param>
-    public PublicKey(byte[] key)
+    /// <param name="key">The public key as <see cref="ReadOnlySpan{T}" /></param>
+    public PublicKey(ReadOnlySpan<byte> key)
     {
         if (key.Length != PublicKeyLength)
             throw new ArgumentOutOfRangeException(nameof(key), "Invalid key length");
-        _keyBytes = key;
+        _keyDecoded = PublicKeyValue.Create(key);
+        _isDecoded = true;
     }
 
     /// <summary>
-    ///     Initialize the public key from the given <see cref="ReadOnlyMemory{T}" />
+    ///     Initialize the public key from the given <see cref="PublicKeyValue" />
     /// </summary>
-    /// <param name="key">The public key as <see cref="ReadOnlyMemory{T}" /></param>
-    public PublicKey(ReadOnlyMemory<byte> key)
+    public PublicKey(ref readonly PublicKeyValue key)
     {
-        if (key.Length != PublicKeyLength)
-            throw new ArgumentOutOfRangeException(nameof(key), "Invalid key length");
-        _keyMemory = key;
+        _keyDecoded = key;
+        _isDecoded = true;
     }
 
     /// <summary>
@@ -116,13 +99,6 @@ public partial class PublicKey
     /// <param name="key">The public key as base58-encoded <see cref="string" /></param>
     public PublicKey(string key)
     {
-        if (_generatedDictionary != null && _generatedDictionary.Dictionary.TryGetValue(key, out var cached))
-        {
-            //Console.WriteLine("hit");
-            CopyFrom(cached);
-            return;
-        }
-
         _keyEncoded = key;
     }
 
@@ -135,12 +111,7 @@ public partial class PublicKey
         return new PublicKey(encodedKey);
     }
 
-    public static implicit operator PublicKey(byte[] rawKey)
-    {
-        return new PublicKey(rawKey);
-    }
-
-    public static implicit operator PublicKey(ReadOnlyMemory<byte> rawKey)
+    public static implicit operator PublicKey(ReadOnlySpan<byte> rawKey)
     {
         return new PublicKey(rawKey);
     }
@@ -150,14 +121,9 @@ public partial class PublicKey
         return key.Key;
     }
 
-    public static implicit operator byte[](PublicKey key)
+    public static implicit operator ReadOnlySpan<byte>(PublicKey key)
     {
-        return key.KeyBytes;
-    }
-
-    public static implicit operator ReadOnlyMemory<byte>(PublicKey key)
-    {
-        return key.KeyMemory;
+        return key.KeySpan;
     }
 
     #endregion
@@ -171,20 +137,21 @@ public partial class PublicKey
         return false;
     }
 
-    private int? _hashCode;
-
     /// <inheritdoc cref="GetHashCode()" />
     public override int GetHashCode()
     {
-        // ReSharper disable once NonReadonlyMemberInGetHashCode because KeyMemory is ReadOnly
-        return _hashCode ??= KeyMemory.Span.FastHashCode();
+        return KeyValue.GetHashCode();
     }
 
     private bool Equals(PublicKey other)
     {
-        if (other._keyEncoded != null && _keyEncoded != null) return other._keyEncoded == _keyEncoded;
+        if (_isDecoded && other._isDecoded)
+            return _keyDecoded == other._keyDecoded;
 
-        return KeyMemory.Span.SequenceEqual(other.KeyMemory.Span);
+        if (_keyEncoded != null && other._keyEncoded != null && !_isDecoded && !other._isDecoded)
+            return _keyEncoded == other._keyEncoded;
+
+        return KeyValue.Equals(in other.KeyValue);
     }
 
     /// <inheritdoc cref="ToString" />
@@ -200,7 +167,6 @@ public partial class PublicKey
     public static bool operator ==(PublicKey? lhs, PublicKey? rhs)
     {
         if (lhs is null && rhs is null) return true;
-
         if (lhs is null || rhs is null) return false;
 
         return lhs.Equals(rhs);

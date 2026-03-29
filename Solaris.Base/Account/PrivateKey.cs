@@ -22,21 +22,21 @@ public class PrivateKey // Probably replaces Solnet's Account class
     /// </summary>
     public const int SecretKeyLength = 32;
 
-    /// <summary>
-    ///     Sign the message
-    /// </summary>
-    /// <param name="message">The data to sign</param>
-    /// <param name="messageOffset">Message offset, when null sets to zero</param>
-    /// <param name="messageLength">Message length, when null sets to <paramref name="message" />.Length</param>
-    /// <returns>The signature of the data</returns>
-    public byte[] Sign(byte[] message, int? messageOffset = null, int? messageLength = null)
-    {
-        var sig = new byte[64];
-        Ed25519.Sign(SecretKeyBytes, 0, PublicKey.KeyBytes, 0, message, messageOffset ?? 0,
-            messageLength ?? message.Length, sig, 0);
-
-        return sig;
-    }
+    // /// <summary>
+    // ///     Sign the message
+    // /// </summary>
+    // /// <param name="message">The data to sign</param>
+    // /// <param name="messageOffset">Message offset, when null sets to zero</param>
+    // /// <param name="messageLength">Message length, when null sets to <paramref name="message" />.Length</param>
+    // /// <returns>The signature of the data</returns>
+    // public byte[] Sign(byte[] message, int? messageOffset = null, int? messageLength = null)
+    // {
+    //     var sig = new byte[64];
+    //     Ed25519.Sign(SecretKeyBytes, 0, PublicKey.KeyBytes, 0, message, messageOffset ?? 0,
+    //         messageLength ?? message.Length, sig, 0);
+    //
+    //     return sig;
+    // }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Sign(ReadOnlySpan<byte> message, Span<byte> signature)
@@ -51,7 +51,7 @@ public class PrivateKey // Probably replaces Solnet's Account class
     public bool Validate()
     {
         var derivedPublicKey = GetPublicKey(SecretKeyBytes);
-        return PublicKey.KeyMemory.Span.SequenceEqual(derivedPublicKey.KeyMemory.Span);
+        return PublicKey.KeySpan.SequenceEqual(derivedPublicKey.KeySpan);
     }
 
     /// <summary>
@@ -63,8 +63,8 @@ public class PrivateKey // Probably replaces Solnet's Account class
     {
         ArgumentOutOfRangeException.ThrowIfNotEqual(secretKey.Length, SecretKeyLength, nameof(secretKey));
 
-        Memory<byte> derivedPublicKey = new byte[PublicKey.PublicKeyLength];
-        Ed25519.GeneratePublicKey(secretKey, derivedPublicKey.Span);
+        byte[] derivedPublicKey = new byte[PublicKey.PublicKeyLength];
+        Ed25519.GeneratePublicKey(secretKey, derivedPublicKey);
 
         return new PublicKey(derivedPublicKey);
     }
@@ -102,13 +102,11 @@ public class PrivateKey // Probably replaces Solnet's Account class
     private string? _keyEncoded;
     private ReadOnlyMemory<byte>? _keyMemory;
     private byte[]? _keyBytes;
-    private byte[]? _secretKeyBytes;
-    private PublicKey? _publicKey;
 
     /// <summary>
     ///     Corresponding <see cref="PublicKey" />
     /// </summary>
-    public PublicKey PublicKey => _publicKey ??= KeyMemory[32..];
+    public PublicKey PublicKey => field ??= KeyMemory[32..].Span;
 
     /// <summary>
     ///     Private key represented as base58-encoded string
@@ -148,7 +146,7 @@ public class PrivateKey // Probably replaces Solnet's Account class
     /// </summary>
     public byte[] KeyBytes => _keyBytes ??= KeyMemory.ToArray();
 
-    private byte[] SecretKeyBytes => _secretKeyBytes ??= KeyMemory[..32].ToArray();
+    private byte[] SecretKeyBytes => field ??= KeyMemory[..32].ToArray();
 
     #endregion
 
@@ -235,6 +233,11 @@ public class PrivateKey // Probably replaces Solnet's Account class
     public static implicit operator ReadOnlyMemory<byte>(PrivateKey key)
     {
         return key.KeyMemory;
+    }
+    
+    public static implicit operator ReadOnlySpan<byte>(PrivateKey key)
+    {
+        return key.KeyMemory.Span;
     }
 
     #endregion

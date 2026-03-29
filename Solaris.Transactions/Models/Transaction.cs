@@ -87,6 +87,7 @@ public class Transaction
 
     public byte[] Build()
     {
+        ArgumentNullException.ThrowIfNull(Signers);
         return BuildMessage().BuildTransaction(Signers);
     }
 
@@ -98,7 +99,7 @@ public class Transaction
     {
         var accountMetaMap = new Dictionary<PublicKey, CompiledAccountMeta>(Instructions!.Sum(x => x.Keys.Length + 1));
 
-        if (ExternalFeePayer != null) accountMetaMap[ExternalFeePayer] = new CompiledAccountMeta { IsSigner = true };
+        if (ExternalFeePayer != null) accountMetaMap[ExternalFeePayer] = new CompiledAccountMeta { IsSigner = true, IsWritable = true};
 
         foreach (var ix in Instructions!)
         {
@@ -164,8 +165,8 @@ public class Transaction
         readonlySigners.CopyTo(sortedSpan.Slice(writableSigners.Count, readonlySigners.Count));
         writableNonSigners.CopyTo(sortedSpan.Slice(readonlySigners.Count + writableSigners.Count,
             writableNonSigners.Count));
-        readonlyNonSigners.CopyTo(sortedSpan.Slice(
-            writableNonSigners.Count + readonlySigners.Count + writableSigners.Count, readonlyNonSigners.Count));
+        readonlyNonSigners.CopyTo(sortedSpan.Slice(writableNonSigners.Count + readonlySigners.Count + writableSigners.Count, 
+            readonlyNonSigners.Count));
 
         msg.Accounts = sorted;
     }

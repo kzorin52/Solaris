@@ -39,7 +39,7 @@ public ref struct BorshDeserializer(ReadOnlySpan<byte> data)
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public PublicKey PublicKey()
     {
-        return Span(32).ToArray();
+        return Span(32);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -51,28 +51,79 @@ public ref struct BorshDeserializer(ReadOnlySpan<byte> data)
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Bool()
     {
-        return Byte() == 1;
+        return _data[Offset++] == 1;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string String()
     {
         var valueByteCount = Integer<int>();
-        return Encoding.UTF8.GetString(Span(valueByteCount));
+        return Encoding.UTF8.GetString(Span(valueByteCount).Trim((byte)0));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public T Deserialize<T>() where T : IBorshDeserializable<T>
+    {
+        return T.Deserialize(ref this);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public unsafe ReadOnlySpan<T> Integers<T>(int length) where T : unmanaged
+    {
+        var size = sizeof(T) * length;
+        var arr = MemoryMarshal.Cast<byte, T>(_data.Slice(Offset, size));
+        Offset += size;
+        return arr;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public T[] ArrayOf<T>(int length) where T : IBorshDeserializable<T>
+    {
+        var arr = new T[length];
+        for (var i = 0; i < length; i++)
+            arr[i] = T.Deserialize(ref this);
+        return arr;
     }
 }
 
 public static class BorshDeserializationExtensions
 {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static unsafe T Integer<T>(this ReadOnlySpan<byte> data) where T : unmanaged
+    public static T Deserialize<T>(this ReadOnlySpan<byte> data) where T : IBorshDeserializable<T>
     {
-        return MemoryMarshal.Read<T>(data[..sizeof(T)]);
+        var des = new BorshDeserializer(data);
+        return T.Deserialize(ref des);
+    } // for nested structs
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T Deserialize<T>(this ReadOnlySpan<byte> data, PublicKey? publicKey)
+        where T : IBorshDeserializable<T>, IAccountData
+    {
+        var des = new BorshDeserializer(data);
+        var account = T.Deserialize(ref des);
+        account.PublicKey = publicKey;
+        return account;
+    } // for top-level structs
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static unsafe T Integer<T>(this ReadOnlySpan<byte> data, int offset = 0) where T : unmanaged
+    {
+        return MemoryMarshal.Read<T>(data.Slice(offset, sizeof(T)));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static PublicKey PublicKey(this ReadOnlySpan<byte> data, int offset = 0)
+    {
+        return new PublicKey(data.Slice(offset, 32).ToArray());
     }
 }
 
-public abstract class BorshDeserializable
+public interface IBorshDeserializable<out TSelf> where TSelf : IBorshDeserializable<TSelf>
 {
-    public PublicKey? PublicKey { get; set; }
-    public abstract BorshDeserializable Update(ReadOnlySpan<byte> data, PublicKey? publicKey = null);
+    static abstract TSelf Deserialize(ref BorshDeserializer des);
+}
+
+public interface IAccountData
+{
+    PublicKey? PublicKey { get; set; }
 }

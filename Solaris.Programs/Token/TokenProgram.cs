@@ -39,4 +39,35 @@ public static class TokenProgram
             Data = [0x09]
         };
     }
+
+    public static TransactionInstruction SetAuthority(PublicKey account, PublicKey currentAuthority, 
+        AuthorityType authorityType, PublicKey? newAuthority) // 6
+    {
+        var data = new FluentSerializer(1 + 1 + 1 + 32);
+        data.Write(6)
+            .Write((byte)authorityType)
+            .Write(newAuthority != null ? (byte)1 : (byte)0)
+            .Write(newAuthority ?? SystemProgram.ProgramId);
+        
+        return new TransactionInstruction
+        {
+            ProgramId = ProgramId,
+            Keys = 
+            [
+                AccountMeta.Writable(account),
+                AccountMeta.ReadOnly(currentAuthority, true)
+            ],
+            Data = data.Build()
+        };
+    }
+}
+public enum AuthorityType : byte {
+    /// Authority to mint new tokens
+    MintTokens,
+    /// Authority to freeze any account associated with the Mint
+    FreezeAccount,
+    /// Owner of a given token account
+    AccountOwner,
+    /// Authority to close a token account
+    CloseAccount,
 }

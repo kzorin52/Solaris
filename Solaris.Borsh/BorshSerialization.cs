@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Solaris.Borsh;
@@ -85,46 +86,52 @@ public ref struct FluentSerializer
         _serializer = new BorshSerializer(_buffer);
     }
 
+    [UnscopedRef]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public FluentSerializer Write(ReadOnlySpan<byte> value)
+    public ref FluentSerializer Write(ReadOnlySpan<byte> value)
     {
         _serializer.Write(value);
-        return this;
+        return ref this;
     }
 
+    [UnscopedRef]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public FluentSerializer Write(byte value)
+    public ref FluentSerializer Write(byte value)
     {
         _serializer.Write(value);
-        return this;
+        return ref this;
     }
 
+    [UnscopedRef]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public FluentSerializer Write(bool value)
+    public ref FluentSerializer Write(bool value)
     {
         _serializer.Write(value);
-        return this;
+        return ref this;
     }
 
+    [UnscopedRef]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public FluentSerializer Write(IBorshSerializable value)
+    public ref FluentSerializer Write(IBorshSerializable value)
     {
         _serializer.Write(value);
-        return this;
+        return ref this;
     }
 
+    [UnscopedRef]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public FluentSerializer WriteInteger<T>(T value) where T : unmanaged
+    public ref FluentSerializer WriteInteger<T>(T value) where T : unmanaged
     {
         _serializer.WriteInteger(value);
-        return this;
+        return ref this;
     }
 
+    [UnscopedRef]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public FluentSerializer Skip(int cnt)
+    public ref FluentSerializer Skip(int cnt)
     {
         _serializer.WriteZero(cnt);
-        return this;
+        return ref this;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -1,104 +1,266 @@
-﻿using System.Security.Cryptography;
+﻿using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using Solaris.Base.Crypto;
 
 namespace Solaris.Base.Account;
 
 public partial class PublicKey
 {
+    // class of pure insanity and chaos
+    
     private const int MaxSeedsCount = 16;
     private static ReadOnlySpan<byte> ProgramDerivedAddressBytes => "ProgramDerivedAddress"u8;
 
-    /// <summary>
-    ///     Derives a program address
-    /// </summary>
-    /// <param name="seeds">The address seeds</param>
-    /// <param name="programId">The program ID</param>
-    /// <param name="publicKey">The derived public key, returned as inline out</param>
-    /// <returns>true if it could derive the program address for the given seeds, otherwise false</returns>
-    /// <exception cref="ArgumentOutOfRangeException">Throws exception when one of the seeds has an invalid length</exception>
-    public static bool TryCreateProgramAddress(PublicKey programId, out PublicKey publicKey, params ReadOnlySpan<byte[]> seeds)
+    #region TryCreateProgramAddress
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool TryCreateProgramAddressCore(
+        ReadOnlySpan<byte> programId,
+        Span<byte> buffer,
+        int seedsLength,
+        out PublicKey publicKey)
     {
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(seeds.Length, MaxSeedsCount, nameof(seeds));
-
-        var len = ProgramDerivedAddressBytes.Length + PublicKeyLength;
-        foreach (var seed in seeds)
-            len += seed.Length; // pda header + programId + seeds len
-        
-        var buffer = len <= 1024 ? stackalloc byte[len] : new byte[len];
-
-        var offset = 0;
-        foreach (var seed in seeds)
-        {
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(seed.Length, PublicKeyLength, nameof(seed));
-            seed.AsSpan().CopyTo(buffer.Slice(offset, seed.Length));
-            offset += seed.Length;
-        }
-
-        programId.KeyMemory.Span.CopyTo(buffer.Slice(offset, PublicKeyLength));
-        offset += PublicKeyLength;
-
-        ProgramDerivedAddressBytes.CopyTo(buffer.Slice(offset, ProgramDerivedAddressBytes.Length));
+        // buffer layout: [seeds...][programId][ProgramDerivedAddress]
+        programId.CopyTo(buffer[seedsLength..]);
+        ProgramDerivedAddressBytes.CopyTo(buffer[(seedsLength + PublicKeyLength)..]);
 
         var hash = SHA256.HashData(buffer);
         publicKey = new PublicKey(hash);
-        
+
         return !hash.IsOnCurve();
     }
 
-    /// <summary>
-    ///     Attempts to find a program address for the passed seeds and program ID
-    /// </summary>
-    /// <param name="programId"></param>
-    /// <param name="seeds"></param>
-    /// <returns></returns>
-    public static (PublicKey? Key, byte Bump) FindProgramAddress(PublicKey programId, params ReadOnlySpan<byte[]> seeds)
+    public static bool TryCreateProgramAddress(
+        PublicKey programId,
+        out PublicKey publicKey,
+        ReadOnlySpan<byte> seed0)
     {
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(seeds.Length, MaxSeedsCount, nameof(seeds));
+        var seedsLen = seed0.Length;
+        var len = seedsLen + PublicKeyLength + ProgramDerivedAddressBytes.Length;
+        Span<byte> buffer = stackalloc byte[len];
 
-        var len = ProgramDerivedAddressBytes.Length + PublicKeyLength + 1;
-        foreach (var seed in seeds) len += seed.Length;
+        seed0.CopyTo(buffer);
 
-        var buffer = len <= 1024 ? stackalloc byte[len] : new byte[len];
+        return TryCreateProgramAddressCore(programId.KeySpan, buffer, seedsLen, out publicKey);
+    }
 
-        var offset = 0;
-        foreach (var seed in seeds)
-        {
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(seed.Length, PublicKeyLength, nameof(seed));
-            seed.AsSpan().CopyTo(buffer.Slice(offset, seed.Length));
-            offset += seed.Length;
-        }
+    public static bool TryCreateProgramAddress(
+        PublicKey programId,
+        out PublicKey publicKey,
+        ReadOnlySpan<byte> seed0,
+        ReadOnlySpan<byte> seed1)
+    {
+        var seedsLen = seed0.Length + seed1.Length;
+        var len = seedsLen + PublicKeyLength + ProgramDerivedAddressBytes.Length;
+        Span<byte> buffer = stackalloc byte[len];
 
-        ref var bump = ref buffer[offset++];
+        seed0.CopyTo(buffer);
+        seed1.CopyTo(buffer[seed0.Length..]);
+
+        return TryCreateProgramAddressCore(programId.KeySpan, buffer, seedsLen, out publicKey);
+    }
+
+    public static bool TryCreateProgramAddress(
+        PublicKey programId,
+        out PublicKey publicKey,
+        ReadOnlySpan<byte> seed0,
+        ReadOnlySpan<byte> seed1,
+        ReadOnlySpan<byte> seed2)
+    {
+        var seedsLen = seed0.Length + seed1.Length + seed2.Length;
+        var len = seedsLen + PublicKeyLength + ProgramDerivedAddressBytes.Length;
+        Span<byte> buffer = stackalloc byte[len];
+
+        var off = 0;
+        seed0.CopyTo(buffer[off..]); off += seed0.Length;
+        seed1.CopyTo(buffer[off..]); off += seed1.Length;
+        seed2.CopyTo(buffer[off..]);
+
+        return TryCreateProgramAddressCore(programId.KeySpan, buffer, seedsLen, out publicKey);
+    }
+
+    public static bool TryCreateProgramAddress(
+        PublicKey programId,
+        out PublicKey publicKey,
+        ReadOnlySpan<byte> seed0,
+        ReadOnlySpan<byte> seed1,
+        ReadOnlySpan<byte> seed2,
+        ReadOnlySpan<byte> seed3)
+    {
+        var seedsLen = seed0.Length + seed1.Length + seed2.Length + seed3.Length;
+        var len = seedsLen + PublicKeyLength + ProgramDerivedAddressBytes.Length;
+        Span<byte> buffer = stackalloc byte[len];
+
+        var off = 0;
+        seed0.CopyTo(buffer[off..]); off += seed0.Length;
+        seed1.CopyTo(buffer[off..]); off += seed1.Length;
+        seed2.CopyTo(buffer[off..]); off += seed2.Length;
+        seed3.CopyTo(buffer[off..]);
+
+        return TryCreateProgramAddressCore(programId.KeySpan, buffer, seedsLen, out publicKey);
+    }
+
+    public static bool TryCreateProgramAddress(
+        PublicKey programId,
+        out PublicKey publicKey,
+        ReadOnlySpan<byte> seed0,
+        ReadOnlySpan<byte> seed1,
+        ReadOnlySpan<byte> seed2,
+        ReadOnlySpan<byte> seed3,
+        ReadOnlySpan<byte> seed4)
+    {
+        var seedsLen = seed0.Length + seed1.Length + seed2.Length + seed3.Length + seed4.Length;
+        var len = seedsLen + PublicKeyLength + ProgramDerivedAddressBytes.Length;
+        Span<byte> buffer = stackalloc byte[len];
+
+        var off = 0;
+        seed0.CopyTo(buffer[off..]); off += seed0.Length;
+        seed1.CopyTo(buffer[off..]); off += seed1.Length;
+        seed2.CopyTo(buffer[off..]); off += seed2.Length;
+        seed3.CopyTo(buffer[off..]); off += seed3.Length;
+        seed4.CopyTo(buffer[off..]);
+
+        return TryCreateProgramAddressCore(programId.KeySpan, buffer, seedsLen, out publicKey);
+    }
+
+    #endregion
+
+    #region FindProgramAddress
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static (PublicKey? Key, byte Bump) FindProgramAddressCore(
+        ReadOnlySpan<byte> programId,
+        Span<byte> buffer,
+        int seedsLength)
+    {
+        // buffer layout: [seeds...][bump][programId][ProgramDerivedAddress]
+        ref var bump = ref buffer[seedsLength];
+
+        programId.CopyTo(buffer[(seedsLength + 1)..]);
+        ProgramDerivedAddressBytes.CopyTo(buffer[(seedsLength + 1 + PublicKeyLength)..]);
+
+        Span<byte> hash = stackalloc byte[32];
+
         bump = 255;
-
-        programId.KeyMemory.Span.CopyTo(buffer.Slice(offset, PublicKeyLength));
-        offset += PublicKeyLength;
-        ProgramDerivedAddressBytes.CopyTo(buffer.Slice(offset, ProgramDerivedAddressBytes.Length));
-
-        var hash = new byte[32];
-        var hashSpan = hash.AsSpan();
-
         while (bump != 0)
         {
-            SHA256.TryHashData(buffer, hashSpan, out _);
-            if (!hash.IsOnCurve()) return (hash, bump);
-
+            SHA256.TryHashData(buffer, hash, out _);
+            if (!hash.IsOnCurve()) return (new PublicKey(hash), bump);
             --bump;
         }
 
-        return (null, bump);
+        return (null, 0);
     }
+
+    public static (PublicKey? Key, byte Bump) FindProgramAddress(
+        PublicKey programId,
+        ReadOnlySpan<byte> seed0)
+    {
+        var seedsLen = seed0.Length;
+        var len = seedsLen + 1 + PublicKeyLength + ProgramDerivedAddressBytes.Length;
+        Span<byte> buffer = stackalloc byte[len];
+
+        seed0.CopyTo(buffer);
+
+        return FindProgramAddressCore(programId.KeySpan, buffer, seedsLen);
+    }
+
+    public static (PublicKey? Key, byte Bump) FindProgramAddress(
+        PublicKey programId,
+        ReadOnlySpan<byte> seed0,
+        ReadOnlySpan<byte> seed1)
+    {
+        var seedsLen = seed0.Length + seed1.Length;
+        var len = seedsLen + 1 + PublicKeyLength + ProgramDerivedAddressBytes.Length;
+        Span<byte> buffer = stackalloc byte[len];
+
+        seed0.CopyTo(buffer);
+        seed1.CopyTo(buffer[seed0.Length..]);
+
+        return FindProgramAddressCore(programId.KeySpan, buffer, seedsLen);
+    }
+
+    public static (PublicKey? Key, byte Bump) FindProgramAddress(
+        PublicKey programId,
+        ReadOnlySpan<byte> seed0,
+        ReadOnlySpan<byte> seed1,
+        ReadOnlySpan<byte> seed2)
+    {
+        var seedsLen = seed0.Length + seed1.Length + seed2.Length;
+        var len = seedsLen + 1 + PublicKeyLength + ProgramDerivedAddressBytes.Length;
+        Span<byte> buffer = stackalloc byte[len];
+
+        var off = 0;
+        seed0.CopyTo(buffer[off..]); off += seed0.Length;
+        seed1.CopyTo(buffer[off..]); off += seed1.Length;
+        seed2.CopyTo(buffer[off..]);
+
+        return FindProgramAddressCore(programId.KeySpan, buffer, seedsLen);
+    }
+
+    public static (PublicKey? Key, byte Bump) FindProgramAddress(
+        PublicKey programId,
+        ReadOnlySpan<byte> seed0,
+        ReadOnlySpan<byte> seed1,
+        ReadOnlySpan<byte> seed2,
+        ReadOnlySpan<byte> seed3)
+    {
+        var seedsLen = seed0.Length + seed1.Length + seed2.Length + seed3.Length;
+        var len = seedsLen + 1 + PublicKeyLength + ProgramDerivedAddressBytes.Length;
+        Span<byte> buffer = stackalloc byte[len];
+
+        var off = 0;
+        seed0.CopyTo(buffer[off..]); off += seed0.Length;
+        seed1.CopyTo(buffer[off..]); off += seed1.Length;
+        seed2.CopyTo(buffer[off..]); off += seed2.Length;
+        seed3.CopyTo(buffer[off..]);
+
+        return FindProgramAddressCore(programId.KeySpan, buffer, seedsLen);
+    }
+
+    public static (PublicKey? Key, byte Bump) FindProgramAddress(
+        PublicKey programId,
+        ReadOnlySpan<byte> seed0,
+        ReadOnlySpan<byte> seed1,
+        ReadOnlySpan<byte> seed2,
+        ReadOnlySpan<byte> seed3,
+        ReadOnlySpan<byte> seed4)
+    {
+        var seedsLen = seed0.Length + seed1.Length + seed2.Length + seed3.Length + seed4.Length;
+        var len = seedsLen + 1 + PublicKeyLength + ProgramDerivedAddressBytes.Length;
+        Span<byte> buffer = stackalloc byte[len];
+
+        var off = 0;
+        seed0.CopyTo(buffer[off..]); off += seed0.Length;
+        seed1.CopyTo(buffer[off..]); off += seed1.Length;
+        seed2.CopyTo(buffer[off..]); off += seed2.Length;
+        seed3.CopyTo(buffer[off..]); off += seed3.Length;
+        seed4.CopyTo(buffer[off..]);
+
+        return FindProgramAddressCore(programId.KeySpan, buffer, seedsLen);
+    }
+
+    #endregion
+
+    #region CreateWithSeed
 
     /// <summary>
     ///     Derives a new public key from an existing public key and seed
     /// </summary>
-    /// <param name="fromPublicKey"></param>
-    /// <param name="seed"></param>
-    /// <param name="programId"></param>
-    /// <returns>Derived public key</returns>
     public static PublicKey CreateWithSeed(PublicKey fromPublicKey, ReadOnlySpan<byte> seed, PublicKey programId)
     {
-        var hash = SHA256.HashData([..fromPublicKey.KeyMemory.Span, ..seed, ..programId.KeyMemory.Span]);
+        var len = PublicKeyLength + seed.Length + PublicKeyLength;
+        Span<byte> buffer = stackalloc byte[len];
+
+        fromPublicKey.KeySpan.CopyTo(buffer);
+        seed.CopyTo(buffer[PublicKeyLength..]);
+        programId.KeySpan.CopyTo(buffer[(PublicKeyLength + seed.Length)..]);
+
+        Span<byte> hash = stackalloc byte[32];
+        SHA256.TryHashData(buffer, hash, out _);
+
         return new PublicKey(hash);
     }
+
+    #endregion
 }

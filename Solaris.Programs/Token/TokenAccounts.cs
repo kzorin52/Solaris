@@ -3,80 +3,72 @@ using Solaris.Borsh;
 
 namespace Solaris.Programs.Token;
 
-public class Mint
+public struct Mint : IAccountData, IBorshDeserializable<Mint>
 {
     public const int Size = 82; // 4 + 32 + 8 + 1 + 1 + 4 + 32
-
-    public PublicKey? PublicKey; // meta property
-
-    public PublicKey? MintAuthority;
-    public ulong Supply;
-    public byte Decimals;
-    public bool IsInitialized;
-    public PublicKey? FreezeAuthority;
-
-    public Mint(ReadOnlySpan<byte> data, PublicKey? publicKey = null)
+    
+    public PublicKey? PublicKey { get; set; }
+    
+    public PublicKey? MintAuthority; // 0
+    public ulong Supply; // 36
+    public byte Decimals; // 44
+    public bool IsInitialized; // 45
+    public PublicKey? FreezeAuthority; // 46
+    
+    public static Mint Deserialize(ref BorshDeserializer des)
     {
-        Update(data, publicKey);
-    }
+        var mint = new Mint();
 
-    public void Update(ReadOnlySpan<byte> raw, PublicKey? publicKey = null)
-    {
-        PublicKey = publicKey;
-        var des = new BorshDeserializer(raw);
+        if (des.Integer<uint>() != 0) mint.MintAuthority = des.PublicKey();
+        else des.Skip(32);
 
-        if (des.Integer<uint>() != 0)
-            MintAuthority = des.PublicKey();
+        mint.Supply = des.Integer<ulong>();
+        mint.Decimals = des.Byte();
+        mint.IsInitialized = des.Bool();
 
-        Supply = des.Integer<ulong>();
-        Decimals = des.Byte();
-        IsInitialized = des.Bool();
+        if (des.Integer<uint>() != 0) mint.FreezeAuthority = des.PublicKey();
 
-        if (des.Integer<uint>() != 0)
-            FreezeAuthority = des.PublicKey();
+        return mint;
     }
 }
 
-public class TokenAccount
+public struct TokenAccount : IAccountData, IBorshDeserializable<TokenAccount>
 {
     public const int Size = 165; // 32 + 32 + 8 + 4 + 32 + 1 + 4 + 8 + 8 + 4 + 32
 
-    public PublicKey? PublicKey; // meta property
-
-    public PublicKey Mint;
-    public PublicKey Owner;
-    public ulong Amount;
+    public PublicKey? PublicKey { get; set; }
+    
+    public PublicKey Mint; // 0
+    public PublicKey Owner; // 32
+    public ulong Amount; // 64
     public PublicKey? Delegate;
     public TokenAccountState State;
     public ulong? IsNative;
     public ulong DelegatedAmount;
     public PublicKey? CloseAuthority;
 
-    public TokenAccount(ReadOnlySpan<byte> data)
+    public static TokenAccount Deserialize(ref BorshDeserializer des)
     {
-        Update(data);
-    }
+        var ret = new TokenAccount
+        {
+            Mint = des.PublicKey(),
+            Owner = des.PublicKey(),
+            Amount = des.Integer<ulong>()
+        };
 
-    public void Update(ReadOnlySpan<byte> raw)
-    {
-        var des = new BorshDeserializer(raw);
+        if (des.Integer<uint>() != 0) ret.Delegate = des.PublicKey();
+        else des.Skip(32);
 
-        Mint = des.PublicKey();
-        Owner = des.PublicKey();
-        Amount = des.Integer<ulong>();
+        ret.State = des.Integer<TokenAccountState>();
 
-        if (des.Integer<uint>() != 0)
-            Delegate = des.PublicKey();
+        if (des.Integer<uint>() != 0) ret.IsNative = des.Integer<ulong>();
+        else des.Skip(8);
 
-        State = (TokenAccountState)des.Byte();
+        ret.DelegatedAmount = des.Integer<ulong>();
 
-        if (des.Integer<uint>() != 0)
-            IsNative = des.Integer<ulong>();
+        if (des.Integer<uint>() != 0) ret.CloseAuthority = des.PublicKey();
 
-        DelegatedAmount = des.Integer<ulong>();
-
-        if (des.Integer<uint>() != 0)
-            CloseAuthority = des.PublicKey();
+        return ret;
     }
 }
 

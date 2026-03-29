@@ -86,9 +86,9 @@ public struct CompiledMessage
         var serializer = new BorshSerializer(buffer);
         serializer.Write(ref Header);
         serializer.Write((byte)Accounts.Length);
-        foreach (var account in Accounts) serializer.Write(account.KeyMemory.Span);
+        foreach (var account in Accounts) serializer.Write(account);
 
-        serializer.Write(RecentBlockHash.KeyMemory.Span);
+        serializer.Write(RecentBlockHash);
 
         serializer.Write((byte)Instructions.Length);
         foreach (ref var instruction in Instructions.AsSpan())

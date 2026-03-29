@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Solaris.Base.Account;
+using Solaris.Borsh;
 using Solaris.Programs.Token;
 using Solaris.Rpc.RpcModels;
 
@@ -89,12 +91,12 @@ public class SolanaRpcClient(string rpcUri) : IDisposable
         ]))!;
     }
 
-    public async Task<SolanaAccount?> GetAccountInfo(string account, string commitment = "processed",
+    public async Task<SolanaAccount?> GetAccountInfo(PublicKey account, string commitment = "processed",
         string encoding = "base64", DataSlice? dataSlice = null)
     {
         return (await QueryJsonRpcUnwrapContextAsync<SolanaAccount>("getAccountInfo", (object?[])
         [
-            account,
+            account.Key,
             new
             {
                 commitment,
@@ -139,12 +141,12 @@ public class SolanaRpcClient(string rpcUri) : IDisposable
         ]))!;
     }
 
-    public async Task<TokenAccount[]> GetTokenAccountsByOwner(string owner, string programId, string? mint = null,
+    public async Task<TokenAccount[]> GetTokenAccountsByOwner(PublicKey owner, string programId, string? mint = null,
         string commitment = "processed")
     {
         var gtaResp = (await QueryJsonRpcUnwrapContextAsync<GPASingleResult[]>("getTokenAccountsByOwner", (object?[])
         [
-            owner,
+            owner.Key,
             new
             {
                 mint,
@@ -158,7 +160,7 @@ public class SolanaRpcClient(string rpcUri) : IDisposable
         ]))!;
 
         var result = new TokenAccount[gtaResp.Length];
-        for (var i = 0; i < gtaResp.Length; i++) result[i] = new TokenAccount(gtaResp[i].DataSpan);
+        for (var i = 0; i < gtaResp.Length; i++) result[i] = gtaResp[i].DataSpan.Deserialize<TokenAccount>(gtaResp[i].PubKey);
 
         return result;
     }

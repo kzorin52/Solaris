@@ -22,7 +22,7 @@ public static class AssociatedTokenAccountProgram
                 AccountMeta.ReadOnly(mint),
                 AccountMeta.ReadOnly(SystemProgram.ProgramId),
                 AccountMeta.ReadOnly(TokenProgram.ProgramId),
-                AccountMeta.ReadOnly(SysVars.Rent)
+                AccountMeta.ReadOnly(SysVar.Rent)
             ],
             Data = idempotent ? [0x01] : []
         };

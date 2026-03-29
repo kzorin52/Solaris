@@ -89,6 +89,15 @@ public class MemCmpFilter : IGPAFilter
             Offset = offset
         };
     }
+    
+    public MemCmpFilter(ulong discriminator, int offset)
+    {
+        MemCmp = new MemCmpFilterItem
+        {
+            Bytes = Base58.EncodeData(BitConverter.GetBytes(discriminator)),
+            Offset = offset
+        };
+    }
 
     [JsonPropertyName("memcmp")] public MemCmpFilterItem MemCmp { get; set; }
 }

@@ -1,4 +1,5 @@
-﻿using JetBrains.Annotations;
+﻿using System;
+using JetBrains.Annotations;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Solaris.Base.Account;
 using Solaris.Base.Crypto;
@@ -141,11 +142,12 @@ public class PrivateKeyTest
     [TestMethod]
     public void SignatureTest() // covering PrivateKey.Sign and PublicKey.Verify methods
     {
+        Span<byte> actualSigBytes = stackalloc byte[64];
         foreach (var (message, sig) in SignatureCases)
         {
             var msgBytes = Base58.DecodeData(message);
 
-            var actualSigBytes = SignatureAccount.Sign(msgBytes);
+            SignatureAccount.Sign(msgBytes, actualSigBytes);
             var actualSig = Base58.EncodeData(actualSigBytes);
 
             Assert.AreEqual(sig, actualSig);
