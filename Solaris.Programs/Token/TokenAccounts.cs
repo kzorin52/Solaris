@@ -3,7 +3,7 @@ using Solaris.Borsh;
 
 namespace Solaris.Programs.Token;
 
-public struct Mint : IAccountData, IBorshDeserializable<Mint>
+public class Mint : IAccountData, IBorshDeserializable<Mint>
 {
     public const int Size = 82; // 4 + 32 + 8 + 1 + 1 + 4 + 32
     
@@ -32,7 +32,7 @@ public struct Mint : IAccountData, IBorshDeserializable<Mint>
     }
 }
 
-public struct TokenAccount : IAccountData, IBorshDeserializable<TokenAccount>
+public class TokenAccount : IAccountData, IBorshDeserializable<TokenAccount>
 {
     public const int Size = 165; // 32 + 32 + 8 + 4 + 32 + 1 + 4 + 8 + 8 + 4 + 32
 

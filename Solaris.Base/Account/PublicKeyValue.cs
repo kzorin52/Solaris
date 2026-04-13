@@ -123,3 +123,18 @@ public readonly struct PublicKeyValue
         return key.AsSpan();
     }
 }
+
+public static class PublicKeyValueExtensions
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static PublicKeyValue AsPublicKeyValue(this in ReadOnlySpan<byte> key)
+    {
+        return PublicKeyValue.Create(key);
+    }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static PublicKeyValue AsPublicKeyValue(this in Span<byte> key)
+    {
+        return PublicKeyValue.Create(key);
+    }
+}

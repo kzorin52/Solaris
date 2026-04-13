@@ -62,6 +62,12 @@ public ref struct BorshDeserializer(ReadOnlySpan<byte> data)
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Try(int length)
+    {
+        return Offset + length <= _data.Length;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public T Deserialize<T>() where T : IBorshDeserializable<T>
     {
         return T.Deserialize(ref this);

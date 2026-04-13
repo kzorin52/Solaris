@@ -105,6 +105,21 @@ public class SolanaRpcClient(string rpcUri) : IDisposable
             }
         ]))!;
     }
+    
+    public async Task<SolanaAccount?[]> GetMultipleAccounts(IEnumerable<PublicKey> accounts, string commitment = "processed",
+        string encoding = "base64", DataSlice? dataSlice = null)
+    {
+        return (await QueryJsonRpcUnwrapContextAsync<SolanaAccount[]>("getMultipleAccounts", (object?[])
+        [
+            accounts.Select(x => x.Key).ToArray(),
+            new
+            {
+                commitment,
+                encoding,
+                dataSlice
+            }
+        ]))!;
+    }
 
     public async Task<LatestBlockhash> GetLatestBlockhash(string commitment = "processed")
     {

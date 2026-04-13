@@ -1,6 +1,8 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Solaris.Borsh;
 
@@ -91,6 +93,14 @@ public ref struct FluentSerializer
     public ref FluentSerializer Write(ReadOnlySpan<byte> value)
     {
         _serializer.Write(value);
+        return ref this;
+    }
+    
+    [UnscopedRef]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ref FluentSerializer Discriminator(string name)
+    {
+        _serializer.Write(SHA256.HashData(Encoding.UTF8.GetBytes($"global:{name}")).AsSpan(0, 8));
         return ref this;
     }
 
