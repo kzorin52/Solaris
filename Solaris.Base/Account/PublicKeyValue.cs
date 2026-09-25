@@ -58,15 +58,25 @@ public readonly struct PublicKeyValue
 
     private const uint HashSeed = 2098026241U; // just a random prime number
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override int GetHashCode()
     {
+        return GetHashCode(AsSpan());
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int GetHashCode(ReadOnlySpan<byte> source)
+    {
+        if (source.Length < 32)
+            throw new ArgumentOutOfRangeException(nameof(source));
+
+        ref byte b = ref MemoryMarshal.GetReference(source);
+
         if (Aes.IsSupported)
         {
-            var key = Unsafe.As<UInt128, Vector128<byte>>(ref Unsafe.AsRef(in _lower));
-            var data = Unsafe.As<UInt128, Vector128<byte>>(ref Unsafe.AsRef(in _upper));
-            // Mix in the instance-random seed
+            var key = Unsafe.ReadUnaligned<Vector128<byte>>(ref b);
+            var data = Unsafe.ReadUnaligned<Vector128<byte>>(ref Unsafe.Add(ref b, 16));
             key ^= Vector128.CreateScalar(HashSeed).AsByte();
-            // Single AESENC is a powerful mixer - 4 cycles, full diffusion
             var mixed = Aes.Encrypt(data, key);
             var compressed = mixed.AsUInt64().GetElement(0) ^ mixed.AsUInt64().GetElement(1);
             return (int)(uint)(compressed ^ (compressed >> 32));
@@ -74,25 +84,33 @@ public readonly struct PublicKeyValue
 
         if (System.Runtime.Intrinsics.Arm.Aes.IsSupported)
         {
-            var key = Unsafe.As<UInt128, Vector128<byte>>(ref Unsafe.AsRef(in _lower));
-            var data = Unsafe.As<UInt128, Vector128<byte>>(ref Unsafe.AsRef(in _upper));
-            // Mix in the instance-random seed
+            var key = Unsafe.ReadUnaligned<Vector128<byte>>(ref b);
+            var data = Unsafe.ReadUnaligned<Vector128<byte>>(ref Unsafe.Add(ref b, 16));
             key ^= Vector128.CreateScalar(HashSeed).AsByte();
-            // ARM needs explicit MixColumns for equivalent diffusion
-            var mixed = System.Runtime.Intrinsics.Arm.Aes.MixColumns(System.Runtime.Intrinsics.Arm.Aes.Encrypt(data, key));
+            var mixed = System.Runtime.Intrinsics.Arm.Aes.MixColumns(
+                System.Runtime.Intrinsics.Arm.Aes.Encrypt(data, key));
             var compressed = mixed.AsUInt64().GetElement(0) ^ mixed.AsUInt64().GetElement(1);
             return (int)(uint)(compressed ^ (compressed >> 32));
         }
 
         var crc = HashSeed;
-
-        ref var b = ref Unsafe.As<PublicKeyValue, byte>(ref Unsafe.AsRef(in this));
         crc = BitOperations.Crc32C(crc, Unsafe.ReadUnaligned<ulong>(ref b));
         crc = BitOperations.Crc32C(crc, Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref b, 8)));
         crc = BitOperations.Crc32C(crc, Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref b, 16)));
         crc = BitOperations.Crc32C(crc, Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref b, 24)));
 
         return (int)crc;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool Equals(ReadOnlySpan<byte> source, ref readonly PublicKeyValue other)
+    {
+        if (source.Length < 32)
+            throw new ArgumentOutOfRangeException(nameof(source));
+
+        var left = Unsafe.ReadUnaligned<Vector256<ulong>>(ref MemoryMarshal.GetReference(source));
+        var right = Unsafe.As<PublicKeyValue, Vector256<ulong>>(ref Unsafe.AsRef(in other));
+        return left == right;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -27,9 +27,10 @@ public class PublicKeyComparer :
         return alternate.SequenceEqual(other.KeySpan);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int GetHashCode(ReadOnlySpan<byte> alternate)
     {
-        return PublicKeyValue.Create(alternate).GetHashCode();
+        return PublicKeyValue.GetHashCode(alternate);
     }
 
     PublicKey IAlternateEqualityComparer<ReadOnlySpan<byte>, PublicKey>.Create(ReadOnlySpan<byte> alternate)
@@ -66,7 +67,7 @@ public class PublicKeyComparer :
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Equals(ReadOnlySpan<byte> span, PublicKeyValue key)
     {
-        return PublicKeyValue.Create(span).Equals(in key);
+        return PublicKeyValue.Equals(span, in key);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
