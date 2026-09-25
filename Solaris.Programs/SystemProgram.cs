@@ -21,4 +21,17 @@ public static class SystemProgram
             Data = new FluentSerializer(12).WriteInteger(2u).WriteInteger(lamports).Build()
         };
     }
+
+    public static TransactionInstruction Assign(PublicKey account, PublicKey program)
+    {
+        return new TransactionInstruction
+        {
+            ProgramId = ProgramId,
+            Keys =
+            [
+                AccountMeta.Writable(account, true)
+            ],
+            Data = new FluentSerializer(4 + 32).WriteInteger(1u).Write(program).Build()
+        };
+    }
 }

@@ -84,12 +84,12 @@ public class PrivateKey // Probably replaces Solnet's Account class
         return privateKey;
     }
 
-    private static Memory<byte> ExpandSecretKey(ReadOnlySpan<byte> secretKey)
+    private static byte[] ExpandSecretKey(ReadOnlySpan<byte> secretKey)
     {
         ArgumentOutOfRangeException.ThrowIfNotEqual(secretKey.Length, SecretKeyLength, nameof(secretKey));
 
-        Memory<byte> expanded = new byte[PrivateKeyLength];
-        var span = expanded.Span;
+        var expanded = new byte[PrivateKeyLength];
+        var span = expanded.AsSpan();
 
         secretKey.CopyTo(span[..32]);
         Ed25519.GeneratePublicKey(secretKey, span[32..]);
