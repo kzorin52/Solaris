@@ -9,7 +9,7 @@ using Solaris.Rpc.RpcModels;
 
 namespace Solaris.Rpc;
 
-public class SolanaRpcClient(string rpcUri) : IDisposable
+public class SolanaRpcClient(string rpcUri, HttpClient? client = null) : IDisposable
 {
     private const bool ThrowException = true;
 
@@ -18,7 +18,7 @@ public class SolanaRpcClient(string rpcUri) : IDisposable
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    private readonly HttpClient _cli = CreateClient();
+    private readonly HttpClient _cli = client ?? CreateClient();
 
     public void Dispose()
     {
@@ -130,6 +130,18 @@ public class SolanaRpcClient(string rpcUri) : IDisposable
                 commitment
             }
         ]))!;
+    }
+
+    public async Task<ulong> GetSlot(string commitment = "processed", ulong? minContextSlot = null)
+    {
+        return await QueryJsonRpcAsync<ulong>("getSlot", (object?[])
+        [
+            new
+            {
+                commitment,
+                minContextSlot
+            }
+        ]);
     }
 
     public async Task<string> SendTransaction(string transaction, string encoding = "base64", int? maxRetries = null)
