@@ -144,6 +144,18 @@ public class SolanaRpcClient(string rpcUri, HttpClient? client = null) : IDispos
         ]);
     }
 
+    public async Task<ulong> GetBlockHeight(string commitment = "processed", ulong? minContextSlot = null)
+    {
+        return await QueryJsonRpcAsync<ulong>("getBlockHeight", (object?[])
+        [
+            new
+            {
+                commitment,
+                minContextSlot
+            }
+        ]);
+    }
+
     public async Task<ContextWrapped<SignatureStatus?[]>> GetSignatureStatuses(
         IReadOnlyList<string> signatures, SignatureStatusesConfig? config = null)
     {

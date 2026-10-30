@@ -17,14 +17,12 @@ Both formats use compact-u16 lengths. Only v0 supports address lookup tables.
 
 ```csharp
 using Solaris.Base.Account;
+using Solaris.Borsh;
 using Solaris.Programs;
 using Solaris.Transactions.Models;
 
-AddressLookupTableAccount table;
-{
-    var state = new AddressLookupTableState(accountData);
-    table = state.ToAccount(tableAddress);
-}
+var state = accountData.Deserialize<AddressLookupTableState>(tableAddress);
+var table = state.ToAccount();
 
 var transaction = new Transaction
 {
@@ -39,7 +37,8 @@ byte[] packet = transaction.Build();
 ```
 
 `payer` is a `PrivateKey`; `recipient`, `recentBlockhash`, and `tableAddress` are
-`PublicKey` values. `accountData` is the decoded binary lookup-table account data.
+`PublicKey` values. `accountData` is the decoded binary lookup-table account data
+as a `ReadOnlySpan<byte>`.
 Only pass accounts owned by `AddressLookupTableProgram.ProgramId`, and use tables
 whose addresses are usable at the transaction's execution slot. Newly extended
 addresses require a slot to warm up; compilation does not query cluster state.
@@ -69,9 +68,12 @@ a compiled message.
 `AddressLookupTableProgram` provides `CreateLookupTable` (returning the derived
 address through an `out` parameter), `ExtendLookupTable` (with an optional funding
 payer), `FreezeLookupTable`, `DeactivateLookupTable`, and `CloseLookupTable`.
-`AddressLookupTableState` is a zero-copy span view exposing metadata and indexed
-`PublicKeyValue` addresses. `ToAccount` materializes the public keys once for reuse
-across transaction compilations.
+`AddressLookupTableState` implements `IAccountData` and
+`IBorshDeserializable<AddressLookupTableState>`, matching the other program account
+models. Deserialize it through `Solaris.Borsh` to populate its account public key,
+metadata, authority, and address array. `ToAccount()` reuses that array without
+copying it for transaction compilation. All ALT instruction encoding also uses
+`Solaris.Borsh`.
 
 ## Signature statuses
 

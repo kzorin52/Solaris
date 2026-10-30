@@ -10,6 +10,8 @@ public ref struct BorshDeserializer(ReadOnlySpan<byte> data)
     public int Offset;
     private readonly ReadOnlySpan<byte> _data = data;
 
+    public readonly int Remaining => _data.Length - Offset;
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public unsafe T Integer<T>() where T : unmanaged
     {

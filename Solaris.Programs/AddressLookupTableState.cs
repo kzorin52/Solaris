@@ -1,40 +1,52 @@
-using System.Buffers.Binary;
 using Solaris.Base.Account;
+using Solaris.Borsh;
 using Solaris.Transactions.Models;
 
 namespace Solaris.Programs;
 
-public readonly ref struct AddressLookupTableState
+public class AddressLookupTableState : IAccountData, IBorshDeserializable<AddressLookupTableState>
 {
     public const int MetadataSize = 56;
-    private readonly ReadOnlySpan<byte> _data;
 
-    public AddressLookupTableState(ReadOnlySpan<byte> data)
-    {
-        if (data.Length < MetadataSize || (data.Length - MetadataSize) % 32 != 0 ||
-            (data.Length - MetadataSize) / 32 > 256 || BinaryPrimitives.ReadUInt32LittleEndian(data) != 1 || data[21] > 1)
-            throw new ArgumentException("Invalid address lookup table account data.", nameof(data));
-        _data = data;
-    }
+    public PublicKey? PublicKey { get; set; }
+    public ulong DeactivationSlot;
+    public ulong LastExtendedSlot;
+    public byte LastExtendedSlotStartIndex;
+    public PublicKey? Authority;
+    public PublicKey[] Addresses = [];
 
-    public ulong DeactivationSlot => BinaryPrimitives.ReadUInt64LittleEndian(_data[4..]);
-    public ulong LastExtendedSlot => BinaryPrimitives.ReadUInt64LittleEndian(_data[12..]);
-    public byte LastExtendedSlotStartIndex => _data[20];
     public bool IsActive => DeactivationSlot == ulong.MaxValue;
-    public PublicKeyValue? Authority => _data[21] == 0 ? null : PublicKeyValue.Create(_data[22..54]);
-    public int AddressCount => (_data.Length - MetadataSize) / 32;
-    public ReadOnlySpan<byte> AddressBytes => _data[MetadataSize..];
 
-    public PublicKeyValue GetAddress(int index)
+    public static AddressLookupTableState Deserialize(ref BorshDeserializer des)
     {
-        if ((uint)index >= (uint)AddressCount) throw new ArgumentOutOfRangeException(nameof(index));
-        return PublicKeyValue.Create(_data.Slice(MetadataSize + index * 32, 32));
+        var length = des.Remaining;
+        if (length < MetadataSize || (length - MetadataSize) % 32 != 0 ||
+            (length - MetadataSize) / 32 > 256 || des.Integer<uint>() != 1)
+            throw new ArgumentException("Invalid address lookup table account data.", nameof(des));
+
+        var state = new AddressLookupTableState
+        {
+            DeactivationSlot = des.Integer<ulong>(),
+            LastExtendedSlot = des.Integer<ulong>(),
+            LastExtendedSlotStartIndex = des.Byte()
+        };
+        var authorityOption = des.Byte();
+        if (authorityOption > 1)
+            throw new ArgumentException("Invalid address lookup table authority option.", nameof(des));
+        if (authorityOption == 1) state.Authority = des.PublicKey();
+        else des.Skip(32);
+        des.Skip(2);
+
+        var count = (length - MetadataSize) / 32;
+        var addresses = count == 0 ? [] : new PublicKey[count];
+        for (var i = 0; i < addresses.Length; i++) addresses[i] = des.PublicKey();
+        state.Addresses = addresses;
+        return state;
     }
 
-    public AddressLookupTableAccount ToAccount(PublicKey key)
+    public AddressLookupTableAccount ToAccount()
     {
-        var addresses = new PublicKey[AddressCount];
-        for (var i = 0; i < addresses.Length; i++) addresses[i] = new PublicKey(AddressBytes.Slice(i * 32, 32));
-        return new AddressLookupTableAccount(key, addresses);
+        if (PublicKey is null) throw new InvalidOperationException("The lookup table account public key is required.");
+        return new AddressLookupTableAccount(PublicKey, Addresses);
     }
 }

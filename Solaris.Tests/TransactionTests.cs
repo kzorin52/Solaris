@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Solaris.Base.Account;
+using Solaris.Borsh;
 using Solaris.Programs;
 using Solaris.Transactions.LowLevel;
 using Solaris.Transactions.Models;
@@ -130,13 +131,40 @@ public class TransactionTests
             Assert.ThrowsExactly<ArgumentException>(() => Parse(data));
         var valid = new byte[88]; valid[0] = 1; valid[4] = 42; valid[12] = 12;
         Key(10).KeySpan.CopyTo(valid.AsSpan(56));
-        var state = new AddressLookupTableState(valid);
+        var state = ((ReadOnlySpan<byte>)valid).Deserialize<AddressLookupTableState>(Key(50));
         Assert.IsNull(state.Authority); Assert.IsFalse(state.IsActive);
         Assert.AreEqual(42UL, state.DeactivationSlot); Assert.AreEqual(12UL, state.LastExtendedSlot);
-        Assert.AreEqual(Key(10).KeyValue, state.GetAddress(0));
+        Assert.AreEqual(Key(10), state.Addresses[0]);
         valid[21] = 2;
         Assert.ThrowsExactly<ArgumentException>(() => Parse(valid));
     }
 
-    private static void Parse(byte[] data) { _ = new AddressLookupTableState(data); }
+    [TestMethod]
+    public void LookupStateDecodesAuthorityAndFullAddressTableFromCurrentOffset()
+    {
+        var data = new byte[3 + AddressLookupTableState.MetadataSize + 256 * 32];
+        var serializer = new BorshSerializer(data);
+        serializer.WriteZero(3);
+        serializer.WriteInteger(1u);
+        serializer.WriteInteger(ulong.MaxValue);
+        serializer.WriteInteger(ulong.MaxValue - 1);
+        serializer.Write((byte)255);
+        serializer.Write((byte)1);
+        serializer.Write(Key(42).KeySpan);
+        serializer.WriteZero(2);
+        var addresses = Enumerable.Range(0, 256).Select(i => Key((byte)i)).ToArray();
+        foreach (var address in addresses) serializer.Write(address.KeySpan);
+
+        var deserializer = new BorshDeserializer(data);
+        deserializer.Skip(3);
+        var state = deserializer.Deserialize<AddressLookupTableState>();
+        Assert.IsTrue(state.IsActive);
+        Assert.AreEqual(ulong.MaxValue - 1, state.LastExtendedSlot);
+        Assert.AreEqual((byte)255, state.LastExtendedSlotStartIndex);
+        Assert.AreEqual(Key(42), state.Authority);
+        CollectionAssert.AreEqual(addresses, state.Addresses);
+        Assert.AreEqual(0, deserializer.Remaining);
+    }
+
+    private static AddressLookupTableState Parse(byte[] data) => ((ReadOnlySpan<byte>)data).Deserialize<AddressLookupTableState>();
 }

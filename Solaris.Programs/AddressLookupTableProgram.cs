@@ -1,5 +1,5 @@
-using System.Buffers.Binary;
 using Solaris.Base.Account;
+using Solaris.Borsh;
 using Solaris.Transactions.Models;
 
 namespace Solaris.Programs;
@@ -10,13 +10,12 @@ public static class AddressLookupTableProgram
 
     public static TransactionInstruction CreateLookupTable(PublicKey authority, PublicKey payer, ulong recentSlot, out PublicKey address)
     {
-        Span<byte> slot = stackalloc byte[8];
-        BinaryPrimitives.WriteUInt64LittleEndian(slot, recentSlot);
-        var (key, bump) = PublicKey.FindProgramAddress(ProgramId, authority.KeySpan, slot);
+        var serializer = new FluentSerializer(13);
+        serializer.WriteInteger(0u).WriteInteger(recentSlot);
+        var data = serializer.Build();
+        var (key, bump) = PublicKey.FindProgramAddress(ProgramId, authority.KeySpan, data.AsSpan(4, 8));
         address = key ?? throw new InvalidOperationException("Unable to derive lookup table address.");
-        var data = new byte[13];
-        BinaryPrimitives.WriteUInt64LittleEndian(data.AsSpan(4), recentSlot);
-        data[12] = bump;
+        serializer.Write(bump);
         return new TransactionInstruction
         {
             ProgramId = ProgramId,
@@ -30,17 +29,16 @@ public static class AddressLookupTableProgram
     public static TransactionInstruction ExtendLookupTable(PublicKey address, PublicKey authority, ReadOnlySpan<PublicKey> addresses, PublicKey? payer = null)
     {
         if (addresses.IsEmpty || addresses.Length > 256) throw new ArgumentOutOfRangeException(nameof(addresses));
-        var data = new byte[12 + addresses.Length * 32];
-        BinaryPrimitives.WriteUInt32LittleEndian(data, 2);
-        BinaryPrimitives.WriteUInt64LittleEndian(data.AsSpan(4), (ulong)addresses.Length);
-        for (var i = 0; i < addresses.Length; i++) addresses[i].KeySpan.CopyTo(data.AsSpan(12 + i * 32));
+        var serializer = new FluentSerializer(12 + addresses.Length * 32);
+        serializer.WriteInteger(2u).WriteInteger((ulong)addresses.Length);
+        foreach (var key in addresses) serializer.Write(key.KeySpan);
         return new TransactionInstruction
         {
             ProgramId = ProgramId,
             Keys = payer is null
                 ? [AccountMeta.Writable(address), AccountMeta.ReadOnly(authority, true)]
                 : [AccountMeta.Writable(address), AccountMeta.ReadOnly(authority, true), AccountMeta.Writable(payer, true), AccountMeta.ReadOnly(SystemProgram.ProgramId)],
-            Data = data
+            Data = serializer.Build()
         };
     }
 
@@ -48,25 +46,21 @@ public static class AddressLookupTableProgram
 
     public static TransactionInstruction CloseLookupTable(PublicKey address, PublicKey authority, PublicKey recipient)
     {
-        var data = new byte[4];
-        BinaryPrimitives.WriteUInt32LittleEndian(data, 4);
         return new TransactionInstruction
         {
             ProgramId = ProgramId,
             Keys = [AccountMeta.Writable(address), AccountMeta.ReadOnly(authority, true), AccountMeta.Writable(recipient)],
-            Data = data
+            Data = new FluentSerializer(4).WriteInteger(4u).Build()
         };
     }
 
     private static TransactionInstruction AuthorityInstruction(uint discriminator, PublicKey address, PublicKey authority)
     {
-        var data = new byte[4];
-        BinaryPrimitives.WriteUInt32LittleEndian(data, discriminator);
         return new TransactionInstruction
         {
             ProgramId = ProgramId,
             Keys = [AccountMeta.Writable(address), AccountMeta.ReadOnly(authority, true)],
-            Data = data
+            Data = new FluentSerializer(4).WriteInteger(discriminator).Build()
         };
     }
 }
