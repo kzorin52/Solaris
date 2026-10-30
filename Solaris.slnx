@@ -1,11 +1,13 @@
 <Solution>
-    <Project Path="../SharedCrypto/SharedCrypto.csproj" />
+    <Project Path="../SharedCrypto/SharedCrypto/SharedCrypto.csproj" />
+    <Project Path="../SharedCrypto/SharedCrypto.Encoding/SharedCrypto.Encoding.csproj" />
     <Project Path="../SolanaPlayground/SolanaPlayground/SolanaPlayground.csproj" />
     <Project Path="../SolanaRocks/SolanaRocks.csproj" />
     <Project Path="Solaris.Base.Tests/Solaris.Base.Tests.csproj" />
     <Project Path="Solaris.Base/Solaris.Base.csproj" />
     <Project Path="Solaris.Borsh/Solaris.Borsh.csproj" />
     <Project Path="Solaris.Programs/Solaris.Programs.csproj" />
+    <Project Path="Solaris.Tests/Solaris.Tests.csproj" />
     <Project Path="Solaris.Rpc/Solaris.Rpc.csproj" />
     <Project Path="Solaris.Transactions/Solaris.Transactions.csproj" />
 </Solution>

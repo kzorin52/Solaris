@@ -1,0 +1,13 @@
+<Project>
+  <ItemGroup>
+    <!-- Use the available RTM build until the stable 11.0.0 linker package is published. -->
+    <KnownILLinkPack Update="Microsoft.NET.ILLink.Tasks"
+                     Condition="'$(TargetFramework)' == 'net11.0'"
+                     ILLinkPackVersion="11.0.0-rtm.26480.113" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+    <!-- SDK 11.0.100 requests unpublished 9.0.23 reference packs; use the available servicing release. -->
+    <KnownFrameworkReference Update="Microsoft.NETCore.App;Microsoft.AspNetCore.App"
+                             TargetingPackVersion="9.0.14" />
+  </ItemGroup>
+</Project>

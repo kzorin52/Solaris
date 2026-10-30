@@ -31,18 +31,3 @@ public class AccountMeta
         };
     }
 }
-
-public class CompiledAccountMeta
-{
-    public bool IsSigner;
-    public bool IsWritable;
-
-    public static CompiledAccountMeta FromAccountMeta(AccountMeta accountMeta)
-    {
-        return new CompiledAccountMeta
-        {
-            IsSigner = accountMeta.IsSigner,
-            IsWritable = accountMeta.IsWritable
-        };
-    }
-}

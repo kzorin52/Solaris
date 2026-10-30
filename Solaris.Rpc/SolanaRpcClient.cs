@@ -144,6 +144,14 @@ public class SolanaRpcClient(string rpcUri, HttpClient? client = null) : IDispos
         ]);
     }
 
+    public async Task<ContextWrapped<SignatureStatus?[]>> GetSignatureStatuses(
+        IReadOnlyList<string> signatures, SignatureStatusesConfig? config = null)
+    {
+        return (await QueryJsonRpcAsync<ContextWrapped<SignatureStatus?[]>>("getSignatureStatuses",
+            config is null ? (object?[])[signatures] : [signatures, config]))!;
+    }
+
+    // skipPreflight is very intentional since using preflight check instead of separate simulateTransaction is a very bad practice.
     public async Task<string> SendTransaction(string transaction, string encoding = "base64", int? maxRetries = null)
     {
         return (await QueryJsonRpcAsync<string>("sendTransaction", (object?[])

@@ -1,173 +1,150 @@
-﻿using Solaris.Base.Account;
+﻿using System.Runtime.InteropServices;
+using Solaris.Base.Account;
 using Solaris.Transactions.LowLevel;
 
 namespace Solaris.Transactions.Models;
 
-/// <summary>
-///     Represents a transaction to be submitted to the Solana cluster.
-///     A transaction consists of a set of instructions and a list of signatures.
-/// </summary>
 public class Transaction
 {
-    /// <summary>
-    ///     The recent blockhash to be used for the transaction.
-    ///     This serves as a nonce and a time-bound for the transaction validity.
-    /// </summary>
     public PublicKey? BlockHash;
-
-    /// <summary>
-    ///     Optional external fee payer for the transaction.
-    ///     If not specified, the first account in the signers list is treated as the fee payer.
-    /// </summary>
     public PrivateKey? ExternalFeePayer;
-
-    /// <summary>
-    ///     The list of instructions that make up the transaction.
-    ///     These are executed sequentially and atomically.
-    /// </summary>
     public TransactionInstruction[]? Instructions;
-
-    /// <summary>
-    ///     The list of private keys that will sign the transaction.
-    ///     Must include the fee payer and any accounts required to sign by the instructions.
-    /// </summary>
     public PrivateKey[]? Signers;
+    public byte? Version;
+    public AddressLookupTableAccount[] AddressLookupTables = [];
 
-    /// <summary>
-    ///     Builds the <see cref="CompiledMessage" /> from the transaction details.
-    ///     This process involves collecting all unique accounts, ordering them, and compiling instructions.
-    /// </summary>
-    /// <returns>The compiled message ready for serialization.</returns>
-    /// <exception cref="Exception">Thrown if BlockHash, Instructions, or Signers are null or empty.</exception>
     public CompiledMessage BuildMessage()
     {
-        if (BlockHash == null) throw new Exception("Recent blockhash should not be null");
-        if (Instructions == null || Instructions.Length == 0)
-            throw new Exception("Instructions array sould not be null nor empty");
-        if (Signers == null || Signers.Length == 0) throw new Exception("Signers sould not be null nor empty");
+        ArgumentNullException.ThrowIfNull(BlockHash);
+        ArgumentNullException.ThrowIfNull(Instructions);
+        if (Version is not null and not 0)
+            throw new NotSupportedException($"Transaction version {Version} is not supported.");
+        if (Version is null && AddressLookupTables.Length != 0)
+            throw new InvalidOperationException("Address lookups require a version 0 message.");
+        var payer = ExternalFeePayer?.PublicKey ?? (Signers is { Length: > 0 } ? Signers[0].PublicKey : null);
+        if (payer is null) throw new InvalidOperationException("A fee payer is required.");
 
-        var msg = new CompiledMessage();
-
-        // Collect and organize account keys from all instructions
-        var keys = CollectKeys();
-        FillKeys(keys, ref msg);
-        msg.RecentBlockHash = BlockHash;
-
-        // Map public keys to their indices in the message account list
-        var idxMap = new Dictionary<PublicKey, byte>(msg.Accounts.Length);
-        for (byte i = 0; i < msg.Accounts.Length; i++)
-            idxMap[msg.Accounts[i]] = i;
-
-        // Compile instructions by replacing public keys with their indices
-        var instructions = new CompiledInstruction[Instructions.Length];
-        for (var i = 0; i < instructions.Length; i++)
+        var capacity = 1;
+        foreach (var instruction in Instructions) capacity += instruction.Keys.Length + 1;
+        var accounts = new Dictionary<PublicKey, AccountState>(Math.Min(capacity, 256));
+        accounts.Add(payer, new AccountState { IsSigner = true, IsWritable = true });
+        foreach (var instruction in Instructions)
         {
-            var dynamicInstr = Instructions[i];
-
-            var keysIdx = new byte[dynamicInstr.Keys.Length];
-            for (var j = 0; j < dynamicInstr.Keys.Length; j++)
-                keysIdx[j] = idxMap[dynamicInstr.Keys[j].Account];
-
-            instructions[i] = new CompiledInstruction
+            ref var program = ref CollectionsMarshal.GetValueRefOrAddDefault(accounts, instruction.ProgramId, out _);
+            program.IsInvoked = true;
+            foreach (var key in instruction.Keys)
             {
-                ProgramIdIndex = idxMap[dynamicInstr.ProgramId],
-                KeyIndices = keysIdx,
-                Data = dynamicInstr.Data
-            };
+                ref var state = ref CollectionsMarshal.GetValueRefOrAddDefault(accounts, key.Account, out _);
+                state.IsSigner |= key.IsSigner;
+                state.IsWritable |= key.IsWritable;
+            }
+        }
+        if (accounts.Count > 256) throw new InvalidOperationException("A message cannot reference more than 256 accounts.");
+
+        var lookups = AddressLookupTables.Length == 0 ? [] : new MessageAddressTableLookup[AddressLookupTables.Length];
+        var lookupCount = 0;
+        var writableLoaded = 0;
+        var readonlyLoaded = 0;
+        Span<byte> writable = stackalloc byte[256];
+        Span<byte> readOnly = stackalloc byte[256];
+        for (var t = 0; t < AddressLookupTables.Length; t++)
+        {
+            var table = AddressLookupTables[t];
+            if (table.Addresses.Length > 256) throw new ArgumentException("A lookup table cannot contain more than 256 addresses.");
+            for (var i = 0; i < table.Addresses.Length; i++)
+            {
+                ref var state = ref CollectionsMarshal.GetValueRefOrNullRef(accounts, table.Addresses[i]);
+                if (System.Runtime.CompilerServices.Unsafe.IsNullRef(ref state) || state.IsSigner || state.IsInvoked || state.LookupTable != 0)
+                    continue;
+                state.LookupTable = t + 1;
+                state.TableIndex = (byte)i;
+            }
+            var writableCount = 0;
+            var readonlyCount = 0;
+            foreach (var pair in accounts)
+            {
+                if (pair.Value.LookupTable != t + 1) continue;
+                ref var state = ref CollectionsMarshal.GetValueRefOrNullRef(accounts, pair.Key);
+                if (state.IsWritable)
+                {
+                    writable[writableCount++] = state.TableIndex;
+                    state.Index = writableLoaded++;
+                }
+                else
+                {
+                    readOnly[readonlyCount++] = state.TableIndex;
+                    state.Index = readonlyLoaded++;
+                }
+            }
+            if (writableCount + readonlyCount != 0)
+                lookups[lookupCount++] = new MessageAddressTableLookup(table.Key, writable[..writableCount].ToArray(), readOnly[..readonlyCount].ToArray());
         }
 
-        msg.Instructions = instructions;
+        Span<int> counts = stackalloc int[4];
+        counts.Clear();
+        foreach (var state in accounts.Values)
+            if (state.LookupTable == 0) counts[Category(state)]++;
+        var requiredSignatures = counts[0] + counts[1];
+        if (requiredSignatures > 127) throw new InvalidOperationException("A message cannot require more than 127 signatures.");
+        var staticCount = accounts.Count - writableLoaded - readonlyLoaded;
+        var staticKeys = new PublicKey[staticCount];
+        Span<int> offsets = stackalloc int[4] { 0, counts[0], requiredSignatures, requiredSignatures + counts[2] };
+        foreach (var pair in accounts)
+        {
+            ref var state = ref CollectionsMarshal.GetValueRefOrNullRef(accounts, pair.Key);
+            if (state.LookupTable == 0)
+            {
+                state.Index = offsets[Category(state)]++;
+                staticKeys[state.Index] = pair.Key;
+            }
+            else state.Index += staticCount + (state.IsWritable ? 0 : writableLoaded);
+        }
 
-        // Ensure the external fee payer is included in the signers list if specified
-        if (ExternalFeePayer != null && !Signers.Contains(ExternalFeePayer))
-            Signers = [ExternalFeePayer, ..Signers];
-
-        return msg;
+        var compiled = new CompiledInstruction[Instructions.Length];
+        for (var i = 0; i < compiled.Length; i++)
+        {
+            var instruction = Instructions[i];
+            var indices = new byte[instruction.Keys.Length];
+            for (var j = 0; j < indices.Length; j++) indices[j] = (byte)accounts[instruction.Keys[j].Account].Index;
+            compiled[i] = new CompiledInstruction
+            {
+                ProgramIdIndex = (byte)accounts[instruction.ProgramId].Index,
+                KeyIndices = indices,
+                Data = instruction.Data
+            };
+        }
+        if (lookupCount != lookups.Length) Array.Resize(ref lookups, lookupCount);
+        return new CompiledMessage
+        {
+            Version = Version,
+            Header = new CompiledMessageHeader
+            {
+                RequiredSignatures = (byte)requiredSignatures,
+                ReadOnlySignedAccounts = (byte)counts[1],
+                ReadOnlyUnsignedAccounts = checked((byte)counts[3])
+            },
+            Accounts = staticKeys,
+            RecentBlockHash = BlockHash,
+            Instructions = compiled,
+            AddressTableLookups = lookups
+        };
     }
 
     public byte[] Build()
     {
-        ArgumentNullException.ThrowIfNull(Signers);
-        return BuildMessage().BuildTransaction(Signers);
+        var message = BuildMessage();
+        return message.BuildTransaction(Signers ?? [], ExternalFeePayer);
     }
 
-    /// <summary>
-    ///     Collects all unique accounts from the instructions and aggregates their metadata (signer/writable/invoked).
-    /// </summary>
-    /// <returns>A dictionary mapping public keys to their compiled metadata.</returns>
-    private Dictionary<PublicKey, CompiledAccountMeta> CollectKeys()
+    private static int Category(AccountState state) => state.IsSigner ? (state.IsWritable ? 0 : 1) : (state.IsWritable ? 2 : 3);
+
+    private struct AccountState
     {
-        var accountMetaMap = new Dictionary<PublicKey, CompiledAccountMeta>(Instructions!.Sum(x => x.Keys.Length + 1));
-
-        if (ExternalFeePayer != null) accountMetaMap[ExternalFeePayer] = new CompiledAccountMeta { IsSigner = true, IsWritable = true};
-
-        foreach (var ix in Instructions!)
-        {
-            // Handle Program ID
-            if (!accountMetaMap.ContainsKey(ix.ProgramId))
-                accountMetaMap[ix.ProgramId] = new CompiledAccountMeta();
-
-            // Handle accounts involved in the instruction
-            foreach (var key in ix.Keys)
-                if (accountMetaMap.TryGetValue(key.Account, out var meta))
-                {
-                    meta.IsSigner |= key.IsSigner;
-                    meta.IsWritable |= key.IsWritable;
-                }
-                else
-                {
-                    accountMetaMap[key.Account] = CompiledAccountMeta.FromAccountMeta(key);
-                }
-        }
-
-        return accountMetaMap;
-    }
-
-    /// <summary>
-    ///     Sorts the accounts according to Solana's rules and populates the message header and account list.
-    ///     Ordering: Writable Signers, Read-only Signers, Writable Non-Signers, Read-only Non-Signers.
-    /// </summary>
-    /// <param name="map">The map of accounts to their metadata.</param>
-    /// <param name="msg">The compiled message to update.</param>
-    private void FillKeys(Dictionary<PublicKey, CompiledAccountMeta> map, ref CompiledMessage msg)
-    {
-        var writableSigners = new List<PublicKey>(map.Count);
-        var readonlySigners = new List<PublicKey>(map.Count);
-        var writableNonSigners = new List<PublicKey>(map.Count);
-        var readonlyNonSigners = new List<PublicKey>(map.Count);
-
-        foreach (var pair in map)
-            if (pair.Value.IsSigner && pair.Value.IsWritable) writableSigners.Add(pair.Key);
-            else if (pair.Value.IsSigner && !pair.Value.IsWritable) readonlySigners.Add(pair.Key);
-            else if (!pair.Value.IsSigner && pair.Value.IsWritable) writableNonSigners.Add(pair.Key);
-            else if (!pair.Value.IsSigner && !pair.Value.IsWritable) readonlyNonSigners.Add(pair.Key);
-
-        // Ensure ExternalFeePayer is the first signer (index 0)
-        if (ExternalFeePayer != null)
-        {
-            if (writableSigners.IndexOf(ExternalFeePayer) is var idx && idx != -1)
-                writableSigners.RemoveAt(idx);
-            writableSigners.Insert(0, ExternalFeePayer);
-        }
-
-        msg.Header = new CompiledMessageHeader
-        {
-            RequiredSignatures = (byte)(writableSigners.Count + readonlySigners.Count),
-            ReadOnlySignedAccounts = (byte)readonlySigners.Count,
-            ReadOnlyUnsignedAccounts = (byte)readonlyNonSigners.Count
-        };
-
-        var sorted = new PublicKey[writableSigners.Count + readonlySigners.Count + writableNonSigners.Count +
-                                   readonlyNonSigners.Count];
-        var sortedSpan = sorted.AsSpan();
-
-        writableSigners.CopyTo(sortedSpan);
-        readonlySigners.CopyTo(sortedSpan.Slice(writableSigners.Count, readonlySigners.Count));
-        writableNonSigners.CopyTo(sortedSpan.Slice(readonlySigners.Count + writableSigners.Count,
-            writableNonSigners.Count));
-        readonlyNonSigners.CopyTo(sortedSpan.Slice(writableNonSigners.Count + readonlySigners.Count + writableSigners.Count, 
-            readonlyNonSigners.Count));
-
-        msg.Accounts = sorted;
+        public bool IsSigner;
+        public bool IsWritable;
+        public bool IsInvoked;
+        public int LookupTable;
+        public byte TableIndex;
+        public int Index;
     }
 }

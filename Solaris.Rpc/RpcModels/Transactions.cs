@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Solaris.Rpc.RpcModels;
@@ -52,4 +53,21 @@ public class SimulateTransactionReturnData
     [JsonPropertyName("programId")] public required string ProgramId { get; set; }
 
     [JsonPropertyName("data")] public required string[] Data { get; set; }
+}
+
+public class SignatureStatusesConfig
+{
+    [JsonPropertyName("searchTransactionHistory")]
+    public bool SearchTransactionHistory { get; set; }
+}
+
+public class SignatureStatus
+{
+    [JsonPropertyName("slot")] public ulong Slot { get; set; }
+
+    [JsonPropertyName("confirmations")] public ulong? Confirmations { get; set; }
+
+    [JsonPropertyName("err")] public JsonElement? Err { get; set; }
+
+    [JsonPropertyName("confirmationStatus")] public string? ConfirmationStatus { get; set; }
 }
