@@ -2,7 +2,7 @@ using Solaris.Base.Account;
 using Solaris.Borsh;
 using Solaris.Transactions.Models;
 
-namespace Solaris.Programs;
+namespace Solaris.Programs.ALT;
 
 public static class AddressLookupTableProgram
 {

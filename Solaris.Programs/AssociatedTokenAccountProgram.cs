@@ -9,7 +9,7 @@ public static class AssociatedTokenAccountProgram
     public static readonly PublicKey ProgramId = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
 
     public static TransactionInstruction CreateAssociatedTokenAccount(PublicKey payer, PublicKey owner, PublicKey mint,
-        PublicKey derivedAccount, bool idempotent = false)
+        PublicKey derivedAccount, bool idempotent = false, PublicKey? tokenProgramId = null)
     {
         return new TransactionInstruction
         {
@@ -21,16 +21,16 @@ public static class AssociatedTokenAccountProgram
                 AccountMeta.ReadOnly(owner),
                 AccountMeta.ReadOnly(mint),
                 AccountMeta.ReadOnly(SystemProgram.ProgramId),
-                AccountMeta.ReadOnly(TokenProgram.ProgramId),
-                AccountMeta.ReadOnly(SysVar.Rent)
+                AccountMeta.ReadOnly(tokenProgramId ?? TokenProgram.ProgramId)
             ],
             Data = idempotent ? [0x01] : []
         };
     }
 
-    public static PublicKey DeriveAssociatedTokenAccount(PublicKey owner, PublicKey mint, out byte bump)
+    public static PublicKey DeriveAssociatedTokenAccount(PublicKey owner, PublicKey mint, out byte bump,
+        PublicKey? tokenProgramId = null)
     {
-        var result = PublicKey.FindProgramAddress(ProgramId, owner, TokenProgram.ProgramId, mint);
+        var result = PublicKey.FindProgramAddress(ProgramId, owner, tokenProgramId ?? TokenProgram.ProgramId, mint);
 
         bump = result.Bump;
         return result.Key!;

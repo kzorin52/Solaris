@@ -19,6 +19,7 @@ Both formats use compact-u16 lengths. Only v0 supports address lookup tables.
 using Solaris.Base.Account;
 using Solaris.Borsh;
 using Solaris.Programs;
+using Solaris.Programs.ALT;
 using Solaris.Transactions.Models;
 
 var state = accountData.Deserialize<AddressLookupTableState>(tableAddress);
@@ -75,6 +76,102 @@ metadata, authority, and address array. `ToAccount()` reuses that array without
 copying it for transaction compilation. All ALT instruction encoding also uses
 `Solaris.Borsh`.
 
+## Token-2022
+
+Token-2022 lives in `Solaris.Programs.Token2022`; ALT lives in
+`Solaris.Programs.ALT`. The legacy token program remains in `Solaris.Programs.Token`.
+
+`Token2022Program` targets `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb`.
+It provides the complete base instruction set, including multisig initialization
+and authorities, checked operations, native-token operations, reallocation, UI
+conversion instructions, and batches. Authority methods accept optional
+`ReadOnlySpan<PublicKey>` multisig signers. Without those signers, the authority
+itself is marked as a signer.
+
+| Extension family | Support |
+| --- | --- |
+| Transfer fees | Initialize/update, checked transfers with fees, harvest and withdrawals, epoch-aware fee and inverse-fee calculations |
+| Account policies | Default state, immutable owner, memo requirements, CPI guard, non-transferability |
+| Mint controls | Close authority, permanent delegate, interest-bearing, scaled UI amounts, pause/resume, permissioned burns |
+| Transfer hooks | Initialize/update, explicit remaining accounts, validation-account decoding and PDA/account-data resolution |
+| Metadata and groups | All pointer operations, metadata initialize/update/remove/emit, groups and group members |
+| Confidential transfers | Configure/approve accounts, deposit/withdraw/transfer, pending balances, credit controls, registry configuration |
+| Confidential fees and mint/burn | Harvest/withdraw controls, supply-key rotation, mint/burn, pending burns, permissioned confidential burns |
+| Proof instruction assembly | Inline verification, record-backed proofs, preverified context states, context closure, ordered proof/token instruction bundles |
+
+All token instruction payloads and account decoding use `Solaris.Borsh`.
+Instruction builders allocate the final payload and account-meta arrays directly.
+Caller-provided remaining account metas retain their order and privileges.
+
+```csharp
+using Solaris.Borsh;
+using Solaris.Programs;
+using Solaris.Programs.Token2022;
+
+var mint = mintData.Deserialize<Token2022Mint>(mintAddress);
+int tokenAccountSize = Token2022ExtensionSizes.GetAccountSizeForMint(
+    mint, [Token2022ExtensionType.ImmutableOwner]);
+
+var associatedAddress = AssociatedTokenAccountProgram.DeriveAssociatedTokenAccount(
+    owner, mintAddress, out _, Token2022Program.ProgramId);
+
+var transfer = Token2022Program.TransferChecked(
+    source, mintAddress, destination, amount, mint.Decimals, owner);
+
+if (mint.Extensions.TryGet<Token2022TransferFeeConfig>(out var fees))
+{
+    ulong fee = fees.CalculateEpochFee(epoch, amount);
+    transfer = Token2022Program.TransferCheckedWithFee(
+        source, mintAddress, destination, owner, amount, mint.Decimals, fee);
+}
+```
+
+`mintData` is a `ReadOnlySpan<byte>` of decoded account data; addresses are
+`PublicKey` values. Verify the RPC account owner is `Token2022Program.ProgramId`
+before decoding. Mint extensions must be allocated and initialized before
+`InitializeMint`/`InitializeMint2`; their on-chain ordering and compatibility
+requirements still apply. `Token2022ExtensionSizes.ValidateMintExtensionCombinations`
+checks the interface's mint-extension compatibility rules.
+
+`Token2022Mint`, `Token2022Account`, and `Token2022Multisig` implement `IAccountData`
+and `IBorshDeserializable<T>`. Extended accounts validate the marker, TLV boundaries,
+known payload sizes, and duplicate extensions. All 28 current extension types
+have typed decoders. Unknown TLV types remain available through `TryGetRaw`.
+`Token2022Extensions` owns one copy of the TLV data; ciphertext fields are slices
+of that backing memory, not further copies. Cache typed decoded values when reused.
+`Token2022ExtensionView` borrows an existing TLV span without allocating; the owned
+collection's `Borrow()` exposes the same allocation-free lookup/enumeration API.
+
+Size helpers support fixed extensions and explicit `Token2022ExtensionSize`
+values for variable-length token metadata, deduplicate extensions, derive required
+account extensions from a mint, and avoid the 355-byte multisig length collision.
+`Token2022TokenMetadata.GetPayloadSize()` calculates its UTF-8 payload size.
+
+For a transfer-hook mint, decode its validation account as
+`TransferHookExtraAccountMetaList` and call `TransferHookExtraAccounts.Resolve`.
+The result is ready to pass as `remainingAccounts` to a checked transfer.
+The resolver supports literals, instruction/account data, account keys, and
+hook/external-program PDAs; account-data references require a caller-supplied
+`Func<PublicKey, ReadOnlyMemory<byte>>`. It resolves accounts synchronously from
+already-fetched data and de-escalates duplicate privileges. A span overload writes
+resolved metas into a caller-provided buffer.
+
+Confidential operations accept caller-generated encrypted balances and proofs.
+This Programs layer does not implement cryptographic proof generation or key
+management. Use `Token2022ProofLocation` for an existing context or a nonzero
+relative proof-instruction offset. Overloads accepting `Token2022ProofInput`
+return ordered instruction bundles: record verifiers before the token instruction,
+inline verifiers after it, and context accounts for preverified proofs.
+Record-backed bundle inputs require an output context account.
+The caller must create/fund context accounts and retain the returned instruction
+order. Proof buffers are exact-size checked, not cryptographically validated locally;
+the proof program validates them on-chain. Availability of confidential operations
+depends on the cluster's deployed program and enabled features.
+
+The wire contract follows the official
+[Token-2022 interface](https://github.com/solana-program/token-2022/tree/main/interface/src),
+including current unwrap-lamports, permissioned-burn, and batch instructions.
+
 ## Signature statuses
 
 ```csharp
@@ -101,3 +198,11 @@ The apphost override avoids the unavailable SDK-requested .NET 9 apphost pack.
 Transaction interoperability was exercised against `@solana/web3.js` 1.98.4:
 100 legacy/v0 message and signed-packet comparisons, all lookup-table instruction
 forms, and mutable/frozen lookup-table account decoding.
+
+Token-2022 interoperability was exercised against `@solana-program/token-2022`
+0.20.0 and `@solana/spl-token`: 196 instruction payloads, 100 account lists,
+all 28 extension account layouts and size calculations, six populated extension
+payloads, 60 transfer-fee boundary cases, and transfer-hook resolution using all
+four PDA seed sources. Borrowed TLV lookup allocated zero managed bytes across
+10,000 calls. These are local wire-format and instruction-assembly checks, not
+live-cluster execution or cryptographic proof-generation tests.

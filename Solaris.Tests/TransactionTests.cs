@@ -3,6 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Solaris.Base.Account;
 using Solaris.Borsh;
 using Solaris.Programs;
+using Solaris.Programs.ALT;
 using Solaris.Transactions.LowLevel;
 using Solaris.Transactions.Models;
 
