@@ -1,208 +1,78 @@
 # Solaris
-Low-level, performance-oriented light Solana SDK for .NET <br>
 
-Very early WIP. Base concept (usable).
+Solaris is a low-level, performance-focused Solana SDK for .NET. It provides public/private key primitives, program-derived addresses (PDAs), binary serialization, transaction construction and signing, program instruction builders, account decoders, and an HTTP JSON-RPC client. The projects target **.NET 9 (`net9.0`)**. Solaris is an early, evolving project intended for developers who want explicit control over data, buffers, and transaction assembly rather than a high-level wallet framework.
 
-## Restore with .NET SDK 11.0.100
+**Solaris is not Solnet, and it is not a drop-in replacement for Solnet.** Treat it as a different API and architecture, not a namespace substitution. In particular, its key representation is built around `PublicKeyValue`, and its PDA engine has been completely rewritten. Porting an application means adapting its key handling, instruction construction, transaction flow, and RPC calls to Solaris's APIs.
 
-Run `dotnet restore Solaris.slnx`. `Directory.Build.targets` pins the .NET 9
-reference packs to `9.0.14`, because SDK `11.0.100` requests `9.0.23`, which is
-not available from the configured feeds. The projects continue to target `net9.0`.
-Remove the reference-pack override once the SDK-requested version is available.
+## Performance and architecture
 
-## Versioned transactions and address lookup tables
+Performance is a design priority, expressed through concrete choices rather than a promise that every operation is allocation-free or faster than another SDK:
 
-`Transaction.Version` is `null` for legacy messages and `0` for Solana v0.
-Both formats use compact-u16 lengths. Only v0 supports address lookup tables.
+- **Inline key values.** [`PublicKeyValue`](Solaris.Base/Account/PublicKeyValue.cs) is a readonly, fixed-size 32-byte struct backed by two `UInt128` fields. It supports span-based access and copying, vector-based equality, and hardware-aware hashing. This provides a binary value representation without requiring a separate byte-array object for every key value.
+- **A wrapper when convenience is useful.** [`PublicKey`](Solaris.Base/Account/PublicKey.cs) is a reference type, not an alias for `PublicKeyValue`. It wraps the binary value, lazily decodes base58 input, caches its encoded string, and exposes `KeyValue` and `KeySpan`. Most public instruction and transaction APIs use this wrapper; using Solaris does not mean every key-bearing object is a struct.
+- **A completely rewritten PDA engine.** [`PublicKey.PDA.cs`](Solaris.Base/Account/PublicKey.PDA.cs) exposes span-based seed overloads for `FindProgramAddress` and `TryCreateProgramAddress`. Seed material is assembled in stack buffers; bump search reuses a stack-backed SHA-256 output buffer and creates the result wrapper when a candidate is accepted. The engine uses SHA-256 and the curve-check helper backed by Bouncy Castle, rather than implementing those cryptographic primitives itself. This is a different implementation and API surface, not a compatibility layer over Solnet.
+- **Control over serialization buffers.** `BorshSerializer` writes to a caller-provided `Span<byte>`. Transactions can be compiled with `BuildMessage()` and then written with `CompiledMessage.Serialize(Span<byte>)` or `SerializeTransaction(Span<byte>, ...)`; `Build()` remains the convenient allocating path. Compilation still allocates its account map and output arrays, and compiled instructions retain their original data buffers.
 
-```csharp
-using Solaris.Base.Account;
-using Solaris.Borsh;
-using Solaris.Programs;
-using Solaris.Programs.ALT;
-using Solaris.Transactions.Models;
+These choices aim to reduce avoidable allocations, encoding work, and intermediate copies. They are architectural characteristics, **not comparative benchmark results**. Measure your own workload, including key decoding, compilation, signing, and RPC costs.
 
-var state = accountData.Deserialize<AddressLookupTableState>(tableAddress);
-var table = state.ToAccount();
+## Modules and capabilities
 
-var transaction = new Transaction
-{
-    Version = 0,
-    BlockHash = recentBlockhash,
-    ExternalFeePayer = payer,
-    Signers = [],
-    AddressLookupTables = [table],
-    Instructions = [SystemProgram.Transfer(payer, recipient, 1_000)]
-};
-byte[] packet = transaction.Build();
-```
-
-`payer` is a `PrivateKey`; `recipient`, `recentBlockhash`, and `tableAddress` are
-`PublicKey` values. `accountData` is the decoded binary lookup-table account data
-as a `ReadOnlySpan<byte>`.
-Only pass accounts owned by `AddressLookupTableProgram.ProgramId`, and use tables
-whose addresses are usable at the transaction's execution slot. Newly extended
-addresses require a slot to warm up; compilation does not query cluster state.
-
-The fee payer is `ExternalFeePayer`, or the first entry of `Signers`. All other
-required private keys must be in `Signers`; their order does not determine signature
-order. Building never modifies that array. Signers and invoked program IDs always
-remain static. Supplied tables are considered in order, and the first table
-containing an eligible address wins. Unused tables are omitted.
-
-For reusable buffers, compile once and serialize directly:
-
-```csharp
-var message = transaction.BuildMessage();
-byte[] buffer = new byte[message.TransactionSize()];
-int written = message.SerializeTransaction(buffer, transaction.Signers, payer);
-```
-
-`message.Size()` and `message.Serialize(Span<byte>)` operate on the unsigned message.
-Message serialization allocates no managed memory. Compilation allocates the
-account map and output arrays, reuses instruction data, and does not expand tables
-into intermediate key collections. Signed packets larger than 1,232 bytes,
-more than 256 referenced accounts, missing signers, and unsupported versions fail.
-Keep instruction data and table address arrays unchanged while compiling or using
-a compiled message.
-
-`AddressLookupTableProgram` provides `CreateLookupTable` (returning the derived
-address through an `out` parameter), `ExtendLookupTable` (with an optional funding
-payer), `FreezeLookupTable`, `DeactivateLookupTable`, and `CloseLookupTable`.
-`AddressLookupTableState` implements `IAccountData` and
-`IBorshDeserializable<AddressLookupTableState>`, matching the other program account
-models. Deserialize it through `Solaris.Borsh` to populate its account public key,
-metadata, authority, and address array. `ToAccount()` reuses that array without
-copying it for transaction compilation. All ALT instruction encoding also uses
-`Solaris.Borsh`.
-
-## Token-2022
-
-Token-2022 lives in `Solaris.Programs.Token2022`; ALT lives in
-`Solaris.Programs.ALT`. The legacy token program remains in `Solaris.Programs.Token`.
-
-`Token2022Program` targets `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb`.
-It provides the complete base instruction set, including multisig initialization
-and authorities, checked operations, native-token operations, reallocation, UI
-conversion instructions, and batches. Authority methods accept optional
-`ReadOnlySpan<PublicKey>` multisig signers. Without those signers, the authority
-itself is marked as a signer.
-
-| Extension family | Support |
+| Project | Role |
 | --- | --- |
-| Transfer fees | Initialize/update, checked transfers with fees, harvest and withdrawals, epoch-aware fee and inverse-fee calculations |
-| Account policies | Default state, immutable owner, memo requirements, CPI guard, non-transferability |
-| Mint controls | Close authority, permanent delegate, interest-bearing, scaled UI amounts, pause/resume, permissioned burns |
-| Transfer hooks | Initialize/update, explicit remaining accounts, validation-account decoding and PDA/account-data resolution |
-| Metadata and groups | All pointer operations, metadata initialize/update/remove/emit, groups and group members |
-| Confidential transfers | Configure/approve accounts, deposit/withdraw/transfer, pending balances, credit controls, registry configuration |
-| Confidential fees and mint/burn | Harvest/withdraw controls, supply-key rotation, mint/burn, pending burns, permissioned confidential burns |
-| Proof instruction assembly | Inline verification, record-backed proofs, preverified context states, context closure, ordered proof/token instruction bundles |
+| [`Solaris.Base`](Solaris.Base) | `PublicKeyValue`, `PublicKey`, `PrivateKey`, Ed25519 signing/verification, base58 helpers, and PDA derivation. |
+| [`Solaris.Borsh`](Solaris.Borsh) | Span-based binary readers/writers, serialization interfaces, and account-data deserialization helpers. |
+| [`Solaris.Transactions`](Solaris.Transactions) | Account metas, instruction models, legacy and version-0 message compilation, address lookup table references, signing, and serialization. |
+| [`Solaris.Programs`](Solaris.Programs) | Instruction builders for System, Compute Budget, Memo, Associated Token Account, legacy Token, Token-2022, and address lookup tables; token and lookup-table account decoders. |
+| [`Solaris.Rpc`](Solaris.Rpc) | `SolanaRpcClient`: HTTP JSON-RPC methods for accounts, blockhashes, slots, transaction history, simulation, submission, and signature status queries. |
+| [`Solaris.Base.Tests`](Solaris.Base.Tests), [`Solaris.Tests`](Solaris.Tests) | MSTest projects covering base primitives and the higher-level modules. |
 
-All token instruction payloads and account decoding use `Solaris.Borsh`.
-Instruction builders allocate the final payload and account-meta arrays directly.
-Caller-provided remaining account metas retain their order and privileges.
+Token-2022 includes extension decoding and sizing, transfer-fee helpers, transfer-hook account resolution, and confidential-operation instruction/proof assembly. Confidential cryptographic proof generation and confidential key management are **not** provided by this Programs layer. See the [Token-2022 examples](EXAMPLES.md#token-2022-account-sizing-and-fee-aware-transfers) for usage and constraints rather than assuming every extension is a simple transfer flag.
 
-```csharp
-using Solaris.Borsh;
-using Solaris.Programs;
-using Solaris.Programs.Token2022;
+## Getting started
 
-var mint = mintData.Deserialize<Token2022Mint>(mintAddress);
-int tokenAccountSize = Token2022ExtensionSizes.GetAccountSizeForMint(
-    mint, [Token2022ExtensionType.ImmutableOwner]);
+### Build from the repository
 
-var associatedAddress = AssociatedTokenAccountProgram.DeriveAssociatedTokenAccount(
-    owner, mintAddress, out _, Token2022Program.ProgramId);
+Use source/project references to consume this checkout. You need a recent .NET SDK capable of compiling the repository's preview C# features (`LangVersion=preview` in several projects), plus a .NET 9 runtime to run its tests.
 
-var transfer = Token2022Program.TransferChecked(
-    source, mintAddress, destination, amount, mint.Decimals, owner);
+From the repository root, build the RPC project to include all five SDK libraries through project references. The solution also includes sibling projects outside this checkout; they are not required to use Solaris.
 
-if (mint.Extensions.TryGet<Token2022TransferFeeConfig>(out var fees))
-{
-    ulong fee = fees.CalculateEpochFee(epoch, amount);
-    transfer = Token2022Program.TransferCheckedWithFee(
-        source, mintAddress, destination, owner, amount, mint.Decimals, fee);
-}
+```sh
+dotnet restore Solaris.Rpc/Solaris.Rpc.csproj
+dotnet build Solaris.Rpc/Solaris.Rpc.csproj -c Release --no-restore -p:UseAppHost=false
 ```
 
-`mintData` is a `ReadOnlySpan<byte>` of decoded account data; addresses are
-`PublicKey` values. Verify the RPC account owner is `Token2022Program.ProgramId`
-before decoding. Mint extensions must be allocated and initialized before
-`InitializeMint`/`InitializeMint2`; their on-chain ordering and compatibility
-requirements still apply. `Token2022ExtensionSizes.ValidateMintExtensionCombinations`
-checks the interface's mint-extension compatibility rules.
+For an existing application, reference the modules you need. For example, the RPC project brings its project dependencies transitively:
 
-`Token2022Mint`, `Token2022Account`, and `Token2022Multisig` implement `IAccountData`
-and `IBorshDeserializable<T>`. Extended accounts validate the marker, TLV boundaries,
-known payload sizes, and duplicate extensions. All 28 current extension types
-have typed decoders. Unknown TLV types remain available through `TryGetRaw`.
-`Token2022Extensions` owns one copy of the TLV data; ciphertext fields are slices
-of that backing memory, not further copies. Cache typed decoded values when reused.
-`Token2022ExtensionView` borrows an existing TLV span without allocating; the owned
-collection's `Borrow()` exposes the same allocation-free lookup/enumeration API.
-
-Size helpers support fixed extensions and explicit `Token2022ExtensionSize`
-values for variable-length token metadata, deduplicate extensions, derive required
-account extensions from a mint, and avoid the 355-byte multisig length collision.
-`Token2022TokenMetadata.GetPayloadSize()` calculates its UTF-8 payload size.
-
-For a transfer-hook mint, decode its validation account as
-`TransferHookExtraAccountMetaList` and call `TransferHookExtraAccounts.Resolve`.
-The result is ready to pass as `remainingAccounts` to a checked transfer.
-The resolver supports literals, instruction/account data, account keys, and
-hook/external-program PDAs; account-data references require a caller-supplied
-`Func<PublicKey, ReadOnlyMemory<byte>>`. It resolves accounts synchronously from
-already-fetched data and de-escalates duplicate privileges. A span overload writes
-resolved metas into a caller-provided buffer.
-
-Confidential operations accept caller-generated encrypted balances and proofs.
-This Programs layer does not implement cryptographic proof generation or key
-management. Use `Token2022ProofLocation` for an existing context or a nonzero
-relative proof-instruction offset. Overloads accepting `Token2022ProofInput`
-return ordered instruction bundles: record verifiers before the token instruction,
-inline verifiers after it, and context accounts for preverified proofs.
-Record-backed bundle inputs require an output context account.
-The caller must create/fund context accounts and retain the returned instruction
-order. Proof buffers are exact-size checked, not cryptographically validated locally;
-the proof program validates them on-chain. Availability of confidential operations
-depends on the cluster's deployed program and enabled features.
-
-The wire contract follows the official
-[Token-2022 interface](https://github.com/solana-program/token-2022/tree/main/interface/src),
-including current unwrap-lamports, permissioned-burn, and batch instructions.
-
-## Signature statuses
-
-```csharp
-using Solaris.Rpc.RpcModels;
-
-var response = await rpc.GetSignatureStatuses(
-    new[] { signature },
-    new SignatureStatusesConfig { SearchTransactionHistory = true });
-
-SignatureStatus? status = response.Value![0];
+```sh
+dotnet add path/to/YourApp.csproj reference path/to/Solaris/Solaris.Rpc/Solaris.Rpc.csproj
 ```
 
-The result preserves RPC context and input order. A missing signature has a null
-status; rooted transactions have null `Confirmations`. `Err` is a nullable
-`JsonElement`, preserving string and structured transaction errors.
-Omit the configuration to use the node's default recent-status-cache search.
-Solana accepts up to 256 signatures per request.
+For offline transaction work, reference `Solaris.Programs/Solaris.Programs.csproj` instead; for key primitives alone, reference `Solaris.Base/Solaris.Base.csproj`. These are project paths within your Solaris checkout, not package installation commands. Ensure your application's target framework is compatible with the libraries' `net9.0` target.
 
-## Verification
+**SDK-specific build note:** `Directory.Build.targets` currently pins the .NET 9 reference packs to `9.0.14` for SDK `11.0.100`, whose requested `9.0.23` packs are unavailable from the configured feeds. This does not change the target framework. The commands here disable apphost generation to avoid the corresponding unavailable apphost pack.
 
-Run `dotnet test Solaris.Tests/Solaris.Tests.csproj -c Release -p:UseAppHost=false`
-and `dotnet test Solaris.Base.Tests/Solaris.Base.Tests.csproj -c Release -p:UseAppHost=false`.
-The apphost override avoids the unavailable SDK-requested .NET 9 apphost pack.
-Transaction interoperability was exercised against `@solana/web3.js` 1.98.4:
-100 legacy/v0 message and signed-packet comparisons, all lookup-table instruction
-forms, and mutable/frozen lookup-table account decoding.
+### Learn the APIs
 
-Token-2022 interoperability was exercised against `@solana-program/token-2022`
-0.20.0 and `@solana/spl-token`: 196 instruction payloads, 100 account lists,
-all 28 extension account layouts and size calculations, six populated extension
-payloads, 60 transfer-fee boundary cases, and transfer-hook resolution using all
-four PDA seed sources. Borrowed TLV lookup allocated zero managed bytes across
-10,000 calls. These are local wire-format and instruction-assembly checks, not
-live-cluster execution or cryptographic proof-generation tests.
+Start with [EXAMPLES.md](EXAMPLES.md) for C# examples: [keys and PDAs](EXAMPLES.md#public-keys-and-deterministic-derivation), [signed transfers](EXAMPLES.md#build-a-signed-sol-transfer), [reusable serialization buffers](EXAMPLES.md#compile-once-and-reuse-serialization-buffers), [v0 transactions and lookup tables](EXAMPLES.md#decode-an-alt-and-build-a-v0-transaction), [Token-2022](EXAMPLES.md#token-2022-account-sizing-and-fee-aware-transfers), and [RPC simulation and submission](EXAMPLES.md#rpc-account-checks-simulation-and-submission).
+
+### Run the tests
+
+```sh
+dotnet test Solaris.Base.Tests/Solaris.Base.Tests.csproj -c Release -p:UseAppHost=false
+dotnet test Solaris.Tests/Solaris.Tests.csproj -c Release -p:UseAppHost=false
+```
+
+These commands run the repository's tests; they are not a substitute for simulation and integration testing against your intended cluster.
+
+## Practical expectations
+
+- **Low-level, evolving APIs:** expect to inspect the models and program builders when integrating. Do not assume Solnet API compatibility or complete Solana RPC/program coverage.
+- **The caller supplies chain context:** provide a recent blockhash, all required signers, correct account ownership and state, and usable lookup-table contents. Compilation does not query the cluster or check lookup-table warm-up/deactivation against the execution slot. Keep instruction data and table address arrays stable while compiling or using compiled messages.
+- **Protocol limits still apply:** transaction construction supports legacy and v0 messages, not arbitrary future versions. Signed packets are limited to 1,232 bytes and messages to 256 referenced accounts. Supplying a buffer does not bypass these constraints.
+- **Submission is not confirmation:** `SolanaRpcClient.SendTransaction` sets `skipPreflight = true`. Simulate explicitly when needed, then track signature status and blockhash validity; receiving a signature does not establish successful execution.
+- **Token-2022 needs on-chain context:** check account owners before decoding and respect extension initialization/order requirements. Transfer-hook resolution needs already-fetched account data where referenced. Confidential operations need caller-generated encrypted data/proofs and depend on the cluster's deployed programs and enabled features.
+- **Protect secrets:** private-key encodings and key buffers contain secret material. Do not log them or use example keys for real funds.
+
+## License
+
+Solaris is licensed under the [Apache License 2.0](LICENSE.txt).
