@@ -10,6 +10,11 @@
     <ItemGroup>
         <ProjectReference Include="..\Solaris.Base\Solaris.Base.csproj"/>
         <ProjectReference Include="..\Solaris.Programs\Solaris.Programs.csproj"/>
+        <ProjectReference Include="..\Solaris.Transactions\Solaris.Transactions.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="ZstdSharp.Port" Version="0.8.8"/>
     </ItemGroup>
 
 </Project>

@@ -26,6 +26,7 @@ public ref struct BorshDeserializer(ReadOnlySpan<byte> data)
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ReadOnlySpan<byte> Span(int size)
     {
+        if ((uint)size > (uint)Remaining) throw new FormatException("Truncated Borsh data.");
         var span = _data.Slice(Offset, size);
         Offset += size;
 
@@ -35,6 +36,7 @@ public ref struct BorshDeserializer(ReadOnlySpan<byte> data)
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Skip(int size)
     {
+        if ((uint)size > (uint)Remaining) throw new FormatException("Truncated Borsh data.");
         Offset += size;
     }
 
@@ -47,6 +49,7 @@ public ref struct BorshDeserializer(ReadOnlySpan<byte> data)
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public byte Byte()
     {
+        if ((uint)Offset >= (uint)_data.Length) throw new FormatException("Truncated Borsh data.");
         return _data[Offset++];
     }
 
@@ -54,6 +57,19 @@ public ref struct BorshDeserializer(ReadOnlySpan<byte> data)
     public bool Bool()
     {
         return _data[Offset++] == 1;
+    }
+    
+    public int CompactU16()
+    {
+        var first = Byte();
+        if (first < 128) return first;
+        var second = Byte();
+        if (second == 0) throw new FormatException("Noncanonical compact-u16 length.");
+        var value = (first & 0x7f) | ((second & 0x7f) << 7);
+        if (second < 128) return value;
+        var third = Byte();
+        if (third is 0 or > 3) throw new FormatException("Invalid compact-u16 length.");
+        return value | (third << 14);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -122,7 +138,7 @@ public static class BorshDeserializationExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static PublicKey PublicKey(this ReadOnlySpan<byte> data, int offset = 0)
     {
-        return new PublicKey(data.Slice(offset, 32).ToArray());
+        return new PublicKey(data.Slice(offset, 32));
     }
 }
 

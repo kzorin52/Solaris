@@ -12,6 +12,7 @@ Performance is a design priority, expressed through concrete choices rather than
 - **A wrapper when convenience is useful.** [`PublicKey`](Solaris.Base/Account/PublicKey.cs) is a reference type, not an alias for `PublicKeyValue`. It wraps the binary value, lazily decodes base58 input, caches its encoded string, and exposes `KeyValue` and `KeySpan`. Most public instruction and transaction APIs use this wrapper; using Solaris does not mean every key-bearing object is a struct.
 - **A completely rewritten PDA engine.** [`PublicKey.PDA.cs`](Solaris.Base/Account/PublicKey.PDA.cs) exposes span-based seed overloads for `FindProgramAddress` and `TryCreateProgramAddress`. Seed material is assembled in stack buffers; bump search reuses a stack-backed SHA-256 output buffer and creates the result wrapper when a candidate is accepted. The engine uses SHA-256 and the curve-check helper backed by Bouncy Castle, rather than implementing those cryptographic primitives itself. This is a different implementation and API surface, not a compatibility layer over Solnet.
 - **Control over serialization buffers.** `BorshSerializer` writes to a caller-provided `Span<byte>`. Transactions can be compiled with `BuildMessage()` and then written with `CompiledMessage.Serialize(Span<byte>)` or `SerializeTransaction(Span<byte>, ...)`; `Build()` remains the convenient allocating path. Compilation still allocates its account map and output arrays, and compiled instructions retain their original data buffers.
+- **Borrowed binary transaction views.** [`DecodedTransaction`](Solaris.Transactions/LowLevel/DecodedTransaction.cs) parses legacy/v0 packets from `ReadOnlyMemory<byte>` using the shared `BorshDeserializer`, including its canonical `CompactU16` reader. It does not copy keys, signatures, instruction data, or lookup indices into separate arrays. Static keys are exposed as `PublicKeyValue` spans, and instruction/lookup enumeration uses value types. RPC decodes base64 once into an owned packet buffer and reuses this decoder; HTTP, JSON metadata, and that packet buffer still allocate.
 
 These choices aim to reduce avoidable allocations, encoding work, and intermediate copies. They are architectural characteristics, **not comparative benchmark results**. Measure your own workload, including key decoding, compilation, signing, and RPC costs.
 
@@ -21,7 +22,7 @@ These choices aim to reduce avoidable allocations, encoding work, and intermedia
 | --- | --- |
 | [`Solaris.Base`](Solaris.Base) | `PublicKeyValue`, `PublicKey`, `PrivateKey`, Ed25519 signing/verification, base58 helpers, and PDA derivation. |
 | [`Solaris.Borsh`](Solaris.Borsh) | Span-based binary readers/writers, serialization interfaces, and account-data deserialization helpers. |
-| [`Solaris.Transactions`](Solaris.Transactions) | Account metas, instruction models, legacy and version-0 message compilation, address lookup table references, signing, and serialization. |
+| [`Solaris.Transactions`](Solaris.Transactions) | Account metas, instruction models, legacy and version-0 message compilation, address lookup table references, signing, serialization, and zero-copy binary decoding. |
 | [`Solaris.Programs`](Solaris.Programs) | Instruction builders for System, Compute Budget, Memo, Associated Token Account, legacy Token, Token-2022, and address lookup tables; token and lookup-table account decoders. |
 | [`Solaris.Rpc`](Solaris.Rpc) | `SolanaRpcClient`: HTTP JSON-RPC methods for accounts, blockhashes, slots, transaction history, simulation, submission, and signature status queries. |
 | [`Solaris.Base.Tests`](Solaris.Base.Tests), [`Solaris.Tests`](Solaris.Tests) | MSTest projects covering base primitives and the higher-level modules. |
@@ -55,6 +56,12 @@ For offline transaction work, reference `Solaris.Programs/Solaris.Programs.cspro
 
 Start with [EXAMPLES.md](EXAMPLES.md) for C# examples: [keys and PDAs](EXAMPLES.md#public-keys-and-deterministic-derivation), [signed transfers](EXAMPLES.md#build-a-signed-sol-transfer), [reusable serialization buffers](EXAMPLES.md#compile-once-and-reuse-serialization-buffers), [v0 transactions and lookup tables](EXAMPLES.md#decode-an-alt-and-build-a-v0-transaction), [Token-2022](EXAMPLES.md#token-2022-account-sizing-and-fee-aware-transfers), and [RPC simulation and submission](EXAMPLES.md#rpc-account-checks-simulation-and-submission).
 
+All asynchronous RPC methods accept an optional `CancellationToken` and forward it through HTTP requests and response reads.
+
+`GetMultipleAccounts` supports commitment, data slicing, a minimum context slot, and cancellation; `GetMultipleAccountsWithContext` also retains the evaluation slot and API version. Account data stays an encoded `[payload, encoding]` pair, with `DataSpan` decoding `base58`, `base64`, or `base64+zstd`. Parsed account data is intentionally unsupported.
+
+`GetTransaction` requests **base64 only** and returns a decoded `Solaris.Transactions.LowLevel.DecodedTransaction` alongside the full RPC metadata. Commitment, maximum transaction version, and cancellation remain configurable; JSON/parsed transaction payloads and legacy base58/`binary` encoding choices are removed. See [account batches and transaction history](EXAMPLES.md#rpc-account-batches-and-transaction-history) and [binary transaction decoding](EXAMPLES.md#decode-transaction-packets-without-copying) for examples and buffer-lifetime rules.
+
 ### Run the tests
 
 ```sh
@@ -68,7 +75,7 @@ These commands run the repository's tests; they are not a substitute for simulat
 
 - **Low-level, evolving APIs:** expect to inspect the models and program builders when integrating. Do not assume Solnet API compatibility or complete Solana RPC/program coverage.
 - **The caller supplies chain context:** provide a recent blockhash, all required signers, correct account ownership and state, and usable lookup-table contents. Compilation does not query the cluster or check lookup-table warm-up/deactivation against the execution slot. Keep instruction data and table address arrays stable while compiling or using compiled messages.
-- **Protocol limits still apply:** transaction construction supports legacy and v0 messages, not arbitrary future versions. Signed packets are limited to 1,232 bytes and messages to 256 referenced accounts. Supplying a buffer does not bypass these constraints.
+- **Protocol limits still apply:** transaction construction and binary decoding support legacy and v0 messages, not arbitrary future versions. Signed packets are limited to 1,232 bytes and messages to 256 referenced accounts. Supplying a buffer does not bypass these constraints.
 - **Submission is not confirmation:** `SolanaRpcClient.SendTransaction` sets `skipPreflight = true`. Simulate explicitly when needed, then track signature status and blockhash validity; receiving a signature does not establish successful execution.
 - **Token-2022 needs on-chain context:** check account owners before decoding and respect extension initialization/order requirements. Transfer-hook resolution needs already-fetched account data where referenced. Confidential operations need caller-generated encrypted data/proofs and depend on the cluster's deployed programs and enabled features.
 - **Protect secrets:** private-key encodings and key buffers contain secret material. Do not log them or use example keys for real funds.

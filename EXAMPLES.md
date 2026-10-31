@@ -12,6 +12,8 @@ These examples use Solaris APIs, not Solnet APIs. They separate local address/in
 - [Decode an ALT and build a v0 transaction](#decode-an-alt-and-build-a-v0-transaction)
 - [Token-2022 account sizing and fee-aware transfers](#token-2022-account-sizing-and-fee-aware-transfers)
 - [RPC account checks, simulation, and submission](#rpc-account-checks-simulation-and-submission)
+- [RPC account batches and transaction history](#rpc-account-batches-and-transaction-history)
+- [Decode transaction packets without copying](#decode-transaction-packets-without-copying)
 
 ## Using the snippets
 
@@ -25,8 +27,10 @@ Use a `net9.0` console project with an SDK that supports the repository's C# syn
 | 4: ALT helper | `Solaris.Base`, `Solaris.Borsh`, `Solaris.Programs`, `Solaris.Transactions` | Standalone helper class; caller supplies account bytes and transaction inputs |
 | 5: Token-2022 helper | Same as block 4 | Standalone helper class; caller supplies mint bytes and account addresses |
 | 6: RPC workflow | `Solaris.Base`, `Solaris.Programs`, `Solaris.Transactions`, `Solaris.Rpc` | Standalone helper class; caller supplies endpoint and funded signer; sends only when requested |
+| 7: RPC inspection | `Solaris.Base`, `Solaris.Rpc` | Standalone read-only helper; caller supplies endpoint, public addresses, and transaction signature |
+| 8: binary transaction inspection | `Solaris.Base`, `Solaris.Transactions` | Standalone helper; caller supplies a signed binary packet; no network |
 
-For example, `Solaris.Base` means a project reference to `Solaris.Base/Solaris.Base.csproj`, with the relative path adjusted for your console project's location. Blocks 4–6 belong in their own `.cs` files in a console project or library; invoke their methods from your application. Each has its own usings. Do not concatenate the standalone top-level programs into one file.
+For example, `Solaris.Base` means a project reference to `Solaris.Base/Solaris.Base.csproj`, with the relative path adjusted for your console project's location. Blocks 4–8 belong in their own `.cs` files in a console project or library; invoke their methods from your application. Each has its own usings. Do not concatenate the standalone top-level programs into one file.
 
 ## Public keys and deterministic derivation
 
@@ -307,3 +311,113 @@ public static class RpcSolTransferExample
 The initial balance check only leaves room for fees; it is not a fee quote or a balance reservation. Simulation is still needed, and state may change between simulation and execution. Solaris currently sends transactions with `skipPreflight = true`, so this example deliberately calls `SimulateTransaction` and checks `Err` before sending. HTTP/RPC errors can throw. Do not log the signer or secret key when handling them.
 
 A returned signature means the RPC accepted submission, **not that the transaction succeeded or reached confirmation**. Use `GetSignatureStatuses` to inspect `Err` and `ConfirmationStatus` at your required commitment, and use block height plus `LastValidBlockHeight` to track expiry. A null status is not success. Reconcile the original signature before deciding to create a new payment: rebuilding and sending another signed payment may transfer twice if the original landed. The height check above reduces obvious expiry failures but cannot guarantee validity at execution time.
+
+## RPC account batches and transaction history
+
+These are read-only calls; they do not build, sign, or submit transactions. Supply a trusted endpoint for the intended cluster, up to **100 addresses per call**, and a transaction signature from that cluster.
+
+`GetMultipleAccounts` returns one entry per requested address, in the same order, including duplicates and `null` for missing accounts. `GetMultipleAccountsWithContext` returns the same values plus `Context.Slot` and the optional `Context.ApiVersion`. The default commitment is `"processed"`; this example requests `"confirmed"`. `minContextSlot` is a lower bound on evaluation, not a request for a historical snapshot at exactly that slot.
+
+Account queries support only `"base58"`, `"base64"` (the default), and `"base64+zstd"` (the Solana wire name for base64-encoded Zstandard data). `SolanaAccount.Data` remains a `string[]` containing `[payload, encoding]`; `DataSpan` decodes all three, including decompression for Zstandard. It decodes afresh on every access. Parsed account objects and the deprecated `"binary"` account encoding are not supported. Base58 account data has the RPC's 128-byte limit. All three supported encodings accept `dataSlice: new DataSlice(offset, length)`; sliced data is not a full account layout, while `Space` still reports the original size.
+
+**C# block 7 — standalone helper; read-only network access:**
+
+```csharp
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using Solaris.Base.Account;
+using Solaris.Rpc;
+
+public static class RpcInspectionExample
+{
+    public static async Task InspectAsync(
+        string rpcUrl,
+        IReadOnlyList<PublicKey> addresses,
+        string signature,
+        ulong? minContextSlot = null,
+        CancellationToken cancellationToken = default)
+    {
+        using var rpc = new SolanaRpcClient(rpcUrl);
+        var snapshot = await rpc.GetMultipleAccountsWithContext(
+            addresses, commitment: "confirmed", encoding: "base64+zstd",
+            minContextSlot: minContextSlot, cancellationToken: cancellationToken);
+        Console.WriteLine($"Account evaluation slot: {snapshot.Context?.Slot}");
+
+        var accounts = snapshot.Value!;
+        for (int i = 0; i < accounts.Length; i++)
+        {
+            var account = accounts[i];
+            Console.WriteLine(account is null
+                ? $"{addresses[i]}: missing"
+                : $"{addresses[i]}: {account.Lamports} lamports, {account.DataSpan.Length} decoded bytes");
+        }
+
+        var result = await rpc.GetTransaction(
+            signature, commitment: "confirmed", maxSupportedTransactionVersion: 0,
+            cancellationToken: cancellationToken);
+        if (result is null)
+        {
+            Console.WriteLine("Transaction not found at the requested commitment.");
+            return;
+        }
+
+        var transaction = result.Transaction;
+        var message = transaction.Message;
+        Console.WriteLine($"Transaction slot: {result.Slot}, fee: {result.Meta?.Fee}");
+        Console.WriteLine($"Packet: {transaction.Data.Length} bytes, {transaction.SignatureCount} signatures, {message.Accounts.Length} static accounts");
+        foreach (var instruction in message.Instructions)
+            Console.WriteLine($"Program index {instruction.ProgramIdIndex}: {instruction.KeyIndices.Length} accounts, {instruction.Data.Length} data bytes");
+    }
+}
+```
+
+`GetTransaction` always requests `"base64"`; there is no encoding argument or JSON/parsed/base58/legacy `binary` payload path. It defaults to `"confirmed"` and `maxSupportedTransactionVersion: 0` (legacy and v0). It accepts `"finalized"` but not `"processed"`. Set the maximum version to `null` to omit the option and request legacy transactions only. The shared decoder supports legacy and v0, matching the compiler; unsupported binary versions fail explicitly. Pass cancellation with the named `cancellationToken` argument.
+
+`HistoricalTransaction.Transaction` is a `DecodedTransaction` from `Solaris.Transactions.LowLevel`, not an encoded string or a JSON message model. RPC decodes the base64 token directly into one owned packet buffer, validates it with the shared decoder, and retains no encoded payload string. The JSON-RPC envelope and execution metadata remain JSON as required by the protocol.
+
+`Message.Accounts` contains static keys as a `ReadOnlySpan<PublicKeyValue>`. Instructions expose their program index, `KeyIndices`, and binary `Data` as borrowed views; address-table lookups expose their table key and writable/read-only index slices. Instruction indices address static keys followed by `Meta.LoadedAddresses.Writable` and then `Readonly`. The packet contains lookup references, not the resolved account addresses. `Meta.InnerInstructions` retains the RPC's raw `HistoricalInstruction` metadata shape, including its base58 data string; it does not use parsed instruction models.
+
+`BlockTime`, `Meta`, and optional recording fields can be unavailable. A transaction result of `null` is distinct from a present transaction whose `Meta.Error` reports an execution failure. `Version` is nullable, and distinguishes omitted version information from `"legacy"` and numeric versions. Metadata includes fees, pre/post lamport and token balances, logs, inner instructions, rewards, loaded addresses, return data, compute units, and cost units; token amount strings retain exact precision. RPC/HTTP errors and cancellation propagate to the caller.
+
+The `HistoricalTransaction` and `TransactionVersion` JSON converters are deserialization-only. Their required `Write` overrides throw `NotSupportedException`; RPC response serialization is intentionally unsupported.
+
+## Decode transaction packets without copying
+
+Use `DecodedTransaction.Parse(ReadOnlyMemory<byte>)` for a signed legacy or v0 packet, or `DecodedMessage.Parse(ReadOnlyMemory<byte>)` for a bare serialized message. A `byte[]` converts directly to the required memory view. Parsing and value-type `foreach` traversal over an existing buffer do not allocate per-field arrays or key wrappers. The RPC client uses this same implementation after decoding base64 once.
+
+**C# block 8 — standalone helper; no network or submission:**
+
+```csharp
+using System;
+using Solaris.Base.Account;
+using Solaris.Transactions.LowLevel;
+
+public static class BinaryTransactionExample
+{
+    public static void Inspect(ReadOnlyMemory<byte> packet)
+    {
+        var transaction = DecodedTransaction.Parse(packet);
+        var message = transaction.Message;
+        Console.WriteLine($"Signatures: {transaction.SignatureCount}; static accounts: {message.Accounts.Length}");
+
+        // Parsing does not verify signatures. Do this separately when required.
+        for (int i = 0; i < transaction.SignatureCount; i++)
+        {
+            var signer = new PublicKey(in message.Accounts[i]);
+            bool valid = signer.Verify(message.Data.Span, transaction.GetSignature(i));
+            Console.WriteLine($"Signature {i}: {valid}");
+        }
+
+        foreach (var instruction in message.Instructions)
+            Console.WriteLine($"Program index {instruction.ProgramIdIndex}: {instruction.KeyIndices.Length} accounts, {instruction.Data.Length} data bytes");
+        foreach (var lookup in message.AddressTableLookups)
+            Console.WriteLine($"Lookup: {lookup.WritableIndices.Length} writable, {lookup.ReadOnlyIndices.Length} read-only indices");
+    }
+}
+```
+
+The decoder borrows storage: keep the underlying memory alive and unchanged while any decoded view is in use. Do not overwrite or return a pooled buffer until all consumers finish. `Data` is the complete signed packet; `Message.Data` excludes the signature count/signatures and includes the v0 version prefix when present. `GetSignature(i)` returns a 64-byte span. Formatting keys, constructing `PublicKey` wrappers, or explicitly copying spans is optional caller work, not part of parsing.
+
+The shared `BorshDeserializer` provides bounded byte/span/skip reads and canonical `CompactU16` decoding. Transaction parsing adds header/signature consistency, static/loaded account-index limits, and trailing-byte checks. Malformed packets throw `FormatException`; unsupported versions throw `NotSupportedException`. Signed packets above 1,232 bytes are rejected. Address-table contents, blockhash validity, account ownership, and transaction execution are not checked. Signature verification in the helper is explicit cryptographic work and is not performed automatically by either parser or RPC.
